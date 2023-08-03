@@ -6,8 +6,8 @@ With version 2 we have made a significant effort to improve out test coverage. T
 
 We use [Mocha](https://mochajs.org/) and [Chai](https://www.chaijs.com/) for our testing framework. You can see many examples of writing tests within the ./test folder. Here is a sample with extra comments to help explain what's happening, taken from [./test/sp/items.ts](https://github.com/pnp/pnpjs/blob/main/test/sp/items.ts):
 
-```ts
-import { getRandomString } from "@pnp/common";
+```TypeScript
+import { getRandomString } from "@pnp/core";
 import { testSettings } from "../main";
 import { expect } from "chai";
 import { sp } from "@pnp/sp";
@@ -68,7 +68,7 @@ describe("Items", () => {
 - Tests should be able to run multiple times on the same site, but do not need to cleanup after themselves
 - Each test should be self contained and not depend on other tests, they can depend on work done in before or beforeAll
 - When writing tests you can use "only" and "skip" from mochajs to focus on only the tests you are writing
-- Be sure to review the [various options](../npm-scripts.md#test) when running your tests
+- Be sure to review the [various options](./npm-scripts.md#test) when running your tests
 - If you are writing a test and the endpoint doesn't support app only permissions, you can skip writing a test - but please note that in the PR description
 
 ## Next Steps

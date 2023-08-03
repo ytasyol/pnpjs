@@ -1,13 +1,11 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Web } from "../webs/types.js";
-import { Folders, IFolders, Folder, IFolder } from "./types.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
+import { Folders, IFolders, Folder, IFolder, folderFromServerRelativePath } from "./types.js";
 
 declare module "../webs/types" {
     interface _Web {
         readonly folders: IFolders;
         readonly rootFolder: IFolder;
-        getFolderByServerRelativeUrl(folderRelativeUrl: string): IFolder;
         getFolderByServerRelativePath(folderRelativeUrl: string): IFolder;
         getFolderById(uniqueId: string): IFolder;
     }
@@ -22,13 +20,6 @@ declare module "../webs/types" {
          * Gets the root folder of the web
          */
         readonly rootFolder: IFolder;
-
-        /**
-         * Gets a folder by server relative url
-         *
-         * @param folderRelativeUrl The server relative path to the folder (including /sites/ if applicable)
-         */
-        getFolderByServerRelativeUrl(folderRelativeUrl: string): IFolder;
 
         /**
          * Gets a folder by server relative path if your folder name contains # and % characters
@@ -48,14 +39,10 @@ declare module "../webs/types" {
 }
 
 addProp(_Web, "folders", Folders);
-addProp(_Web, "rootFolder", Folder, "rootFolder");
-
-_Web.prototype.getFolderByServerRelativeUrl = function (this: _Web, folderRelativeUrl: string): IFolder {
-    return Folder(this, `getFolderByServerRelativeUrl('${escapeQueryStrValue(folderRelativeUrl)}')`);
-};
+addProp(_Web, "rootFolder", Folder);
 
 _Web.prototype.getFolderByServerRelativePath = function (this: _Web, folderRelativeUrl: string): IFolder {
-    return Folder(this, `getFolderByServerRelativePath(decodedUrl='${escapeQueryStrValue(folderRelativeUrl)}')`);
+    return folderFromServerRelativePath(this, folderRelativeUrl);
 };
 
 _Web.prototype.getFolderById = function (this: _Web, uniqueId: string): IFolder {

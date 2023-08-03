@@ -1,127 +1,178 @@
 import { expect } from "chai";
-import { sp } from "@pnp/sp";
 import "@pnp/sp/taxonomy";
-import { testSettings } from "../main.js";
+import { ITermSet } from "@pnp/sp/taxonomy";
 
-/**
- * Skipping for now as the API is not fully deployed or stable yet. These tests passed within my tenant.
- * So it worked on my machine. ;)
- */
-describe("Taxonomy", () => {
+describe("Taxonomy", function () {
 
-    if (testSettings.enableWebTests) {
+    before(function () {
 
-        it("Get Term Store Info", async function () {
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
 
-            const info = await sp.termStore();
+    describe("TermStore", function () {
+        it("-invoke", async function () {
+
+            const info = await this.pnp.sp.termStore();
             return expect(info).has.property("id");
         });
 
-        it("Get Term Group Info (groups)", async function () {
+        it("groups", async function () {
+            const info = await this.pnp.sp.termStore.groups();
 
-            const info = await sp.termStore.groups();
-
-            if (info.length < 1) {
-                return;
+            if (info === undefined || info.length < 1) {
+                return expect(info).to.be.an("Array");
             }
 
             return expect(info[0]).has.property("id");
         });
 
-        it("Get Term Group By Id Info (groups)", async function () {
-
-            const info = await sp.termStore.groups();
-
-            if (info.length < 1) {
-                return;
+        // TODO: sets gives API not found error on termStore... need to remove/or fix.
+        it.skip(".sets", async function () {
+            const url = this.pnp.sp.termStore.sets.toRequestUrl();
+            console.log(`Sets: ${url}`);
+            const info = await this.pnp.sp.termStore.sets();
+            if (info === undefined || info.length < 1) {
+                return expect(info).to.be.an("Array");
             }
 
-            return expect(sp.termStore.groups.getById(info[0].id)()).to.eventually.have.property("id");
+            return expect(info[0]).has.property("id");
         });
 
+        it("groups.getById", async function () {
 
-        /**
-         * Term Sets
-         */
-        it("Get Term Set Info (sets)", async function () {
+            const info = await this.pnp.sp.termStore.groups();
 
-            const info = await sp.termStore.groups.top(1)();
-
-            if (info.length < 1) {
-                return;
+            if (info === undefined || info.length < 1) {
+                return expect(info).to.be.an("Array");
             }
 
-            const info2 = await sp.termStore.groups.getById(info[0].id).sets();
+            const group = await this.pnp.sp.termStore.groups.getById(info[0].id)();
 
-            if (info2.length < 1) {
-                return;
-            }
-
-            return expect(info2[0]).has.property("id");
+            return expect(group).has.property("id");
         });
 
-        it("Get Term Set By Id Info (sets)", async function () {
+        // TODO: sets gives API not found error on termStore... need to remove/or fix.
+        it.skip(".sets.getById", async function () {
 
-            const info = await sp.termStore.groups.top(1)();
+            const info = await this.pnp.sp.termStore.sets();
 
-            if (info.length < 1) {
-                return;
+            if (info === undefined || info.length < 1) {
+                return expect(info).to.be.an("Array");
             }
 
-            const group = sp.termStore.groups.getById(info[0].id);
-            const info2 = await group.sets();
+            const set = await this.pnp.sp.termStore.sets.getById(info[0].id)();
+            return expect(set).has.property("id");
+        });
+    });
+    /**
+     * Term Sets
+     */
+    describe("TermSets", function () {
+        let termset: ITermSet = null;
 
-            if (info2.length < 1) {
-                return;
+        before(async function () {
+            const groups = await this.pnp.sp.termStore.groups();
+
+            if (groups === undefined || groups?.length < 1) {
+                this.skip();
             }
+            const groupId = groups[0].id;
 
-            return expect(group.sets.getById(info2[0].id)()).to.eventually.have.property("id");
+            const sets = await this.pnp.sp.termStore.groups.getById(groupId).sets();
+            if (sets === undefined || sets?.length < 1) {
+                this.skip();
+            }
+            const termsetId = sets[0].id;
+            termset = this.pnp.sp.termStore.groups.getById(groupId).sets.getById(termsetId);
         });
 
-
-        /**
-         * Terms
-         */
-        it("Get Terms Info (sets)", async function () {
-
-            const info = await sp.termStore.groups.top(1)();
-
-            if (info.length < 1) {
-                return;
-            }
-
-            const group = sp.termStore.groups.getById(info[0].id);
-            const info2 = await group.sets();
-
-            if (info2.length < 1) {
-                return;
-            }
-
-            return expect(group.sets.getById(info2[0].id).children()).to.eventually.be.fulfilled;
+        it("terms", async function () {
+            const terms = await termset.terms();
+            return expect(terms).to.be.an("Array");
         });
 
-        it("Get Term Info (sets)", async function () {
-
-            const info = await sp.termStore.groups.top(1)();
-
-            if (info.length < 1) {
-                return;
-            }
-
-            const group = sp.termStore.groups.getById(info[0].id);
-            const info2 = await group.sets();
-
-            if (info2.length < 1) {
-                return;
-            }
-
-            const info3 = await group.sets.getById(info2[0].id).children();
-
-            if (info3.length < 1) {
-                return;
-            }
-
-            return expect(group.sets.getById(info2[0].id).getTermById(info3[0].id)()).to.eventually.have.property("id");
+        // TODO: parentGroup gives API not found error on termset... need to remove/or fix.
+        it.skip(".parentGroup", async function () {
+            const parentGroup = await termset.parentGroup();
+            return expect(parentGroup).has.property("id");
         });
-    }
+
+        it("children", async function () {
+            const children = await termset.children();
+            return expect(children).to.be.an("Array");
+        });
+
+        it("relations", async function () {
+            const relations = await termset.relations();
+            return expect(relations).to.be.an("Array");
+        });
+
+        it("getTermById", async function () {
+            const terms = await termset.terms();
+            if (terms.length < 1) {
+                return;
+            }
+            const termById = await termset.getTermById(terms[0].id)();
+            return expect(termById).has.property("id");
+        });
+        it("getAllChildrenAsOrderedTree", async function () {
+            const tree = await termset.getAllChildrenAsOrderedTree();
+            return expect(tree).to.be.an("Array");
+        });
+        it("getAllChildrenAsOrderedTree-retreiveProperties", async function () {
+            const tree = await termset.getAllChildrenAsOrderedTree({ retrieveProperties: true });
+            if (tree.length < 1) {
+                return;
+            }
+            const term = tree[0];
+            return expect(term).has.property("localProperties");
+        });
+    });
+
+    /**
+     * Terms
+     */
+    describe("Terms", function () {
+        let term = null;
+
+        before(async function () {
+            const groups = await this.pnp.sp.termStore.groups();
+
+            if (groups === undefined || groups?.length < 1) {
+                this.skip();
+            }
+            const groupId = groups[0].id;
+
+            const sets = await this.pnp.sp.termStore.groups.getById(groupId).sets();
+
+            if (sets === undefined || sets?.length < 1) {
+                this.skip();
+            }
+            const setId = sets[0].id;
+
+            const terms = await this.pnp.sp.termStore.groups.getById(groupId).sets.getById(setId).terms();
+            if (terms === undefined || terms?.length < 1) {
+                this.skip();
+            }
+            const termId = terms[0].id;
+            term = this.pnp.sp.termStore.groups.getById(groupId).sets.getById(setId).terms.getById(termId);
+        });
+
+        it("getById", async function () {
+            const info = await term();
+            return expect(info).has.property("id");
+        });
+
+        it("term.children", async function () {
+            const children = await term.children();
+            return expect(children).to.be.an("Array");
+        });
+
+        it("term.relations", async function () {
+            const relations = await term.relations();
+            return expect(relations).to.be.an("Array");
+        });
+    });
 });

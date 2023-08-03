@@ -1,8 +1,7 @@
-declare var require: (s: string) => any;
-const path = require("path");
 import { BuildSchema } from "../../config.js";
-// they broke the types in replace-in-file so we need to import it this way
-const replace = require("replace-in-file");
+import replace from "replace-in-file";
+import { resolve, dirname } from "path";
+import importJSON from "../../lib/importJSON.js";
 
 interface TSConfig {
     compilerOptions: {
@@ -10,30 +9,32 @@ interface TSConfig {
     };
 }
 
-/**
- * Replaces the $$Version$$ string in the SharePoint HttpClient
- * 
- * @param version The version number
- * @param ctx The build context 
- */
-export async function replaceVersion(version: string, config: BuildSchema): Promise<void> {
+export function createReplaceVersion(paths: string[], versionMask = /\$\$Version\$\$/ig): (version: string, config: BuildSchema) => Promise<void> {
 
-    const options = {
-        files: [],
-        from: /\$\$Version\$\$/ig,
-        to: version,
-    };
+    /**
+     * Replaces the $$Version$$ string in the SharePoint HttpClient
+     * 
+     * @param version The version number
+     * @param ctx The build context 
+     */
+    return async function (version: string, config: BuildSchema): Promise<void> {
 
-    for (let i = 0; i < config.buildTargets.length; i++) {
+        const options = {
+            files: [],
+            from: versionMask,
+            to: version,
+        };
 
-        // read our outDir from the build target (which will be a tsconfig file)
-        const buildConfig: TSConfig = require(config.buildTargets[i]);
-        const buildRoot = path.resolve(path.dirname(config.buildTargets[i]));
+        for (let i = 0; i < config.buildTargets.length; i++) {
 
-        options.files.push(path.resolve(buildRoot, buildConfig.compilerOptions.outDir, "graph/graphhttpclient.js"));
-        options.files.push(path.resolve(buildRoot, buildConfig.compilerOptions.outDir, "sp/sphttpclient.js"));
-        options.files.push(path.resolve(buildRoot, buildConfig.compilerOptions.outDir, "sp/batch.js"));
+            // read our outDir from the build target (which will be a tsconfig file)
+            const buildConfig: TSConfig = importJSON(config.buildTargets[i]);
+            const buildRoot = resolve(dirname(config.buildTargets[i]));
+
+            options.files.push(...paths.map(p => resolve(buildRoot, buildConfig.compilerOptions.outDir, p)));
+        }
+
+        await (<any>replace)(options);
     }
 
-    await replace(options);
 }

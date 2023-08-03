@@ -17,16 +17,17 @@ import * as NodeFetch from "node-fetch";
 })(global);
 
 // auto populate all extensions
-import "./sp-extensions/index.js";
+import "./sp-extensions/stream.js";
 
 // export extension types as a namespace
-import * as SPNS from "./sp-extensions/index.js";
+import * as SPNS from "./sp-extensions/stream.js";
 
 export {
     SPNS,
 };
 
-export { AADToken, SPOAuthEnv } from "./types.js";
-export { ProviderHostedRequestContext } from "./providerhosted.js";
-export * from "./net/index.js";
-export { setProxyUrl, setProxyAgent } from "./net/proxy.js";
+export * from "./behaviors/msal.js";
+export * from "./behaviors/fetch.js";
+export * from "./behaviors/stream-parse.js";
+export * from "./behaviors/spdefault.js";
+export * from "./behaviors/graphdefault.js";

@@ -1,22 +1,31 @@
 import { expect } from "chai";
-import { testSettings } from "../main.js";
-import { sp } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/user-custom-actions";
 
-describe("user-custom-actions", function () {
-    if (testSettings.enableWebTests) {
+describe("UserCustomActions", function () {
 
-        it("should invoke", function () {
-            return expect(sp.web.userCustomActions()).to.eventually.be.fulfilled;
-        });
+    before(function () {
 
-        it("getById", function () {
-            return expect(sp.web.userCustomActions.getById("00000000-0000-0000-0000-000000000000")).to.haveOwnProperty("update");
-        });
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
 
-        it("clear", function () {
-            return expect(sp.web.userCustomActions.clear()).to.eventually.to.fulfilled;
-        });
-    }
+    it("-invoke", async function () {
+        const actions = await this.pnp.sp.web.userCustomActions();
+        return expect(actions).to.be.an("Array");
+    });
+
+    it("getById", async function () {
+        const actions = await this.pnp.sp.web.userCustomActions();
+        if (actions === undefined || actions.length < 1) {
+            this.skip();
+        }
+        const action = await this.pnp.sp.web.userCustomActions.getById(actions[0].Id)();
+        return expect(action).to.haveOwnProperty("update");
+    });
+
+    it("clear", function () {
+        return expect(this.pnp.sp.web.userCustomActions.clear()).to.eventually.to.fulfilled;
+    });
 });

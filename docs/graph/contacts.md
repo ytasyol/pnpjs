@@ -1,6 +1,6 @@
 # @pnp/graph/contacts
 
-The ability to manage contacts and folders in Outlook is a capability introduced in version 1.2.2 of @pnp/graph. Through the methods described
+The ability to manage contacts and folders in Outlook is a capability introduced in version 1.2.2 of @pnp/graphfi(). Through the methods described
 you can add and edit both contacts and folders in a users Outlook.
 
 More information can be found in the official Graph documentation:
@@ -10,11 +10,6 @@ More information can be found in the official Graph documentation:
 ## IContact, IContacts, IContactFolder, IContactFolders
 
 [![Invokable Banner](https://img.shields.io/badge/Invokable-informational.svg)](../concepts/invokable.md) [![Selective Imports Banner](https://img.shields.io/badge/Selective%20Imports-informational.svg)](../concepts/selective-imports.md)  
-
-|Scenario|Import Statement|
-|--|--|
-|Selective 1|import { graph } from "@pnp/graph";<br />import "@pnp/graph/contacts";|
-|Preset: All|import { graph } from "@pnp/graph/presets/all";|
 
 ## Set up notes
 
@@ -26,9 +21,11 @@ Contact ID, Folder ID, and Parent Folder ID use the following format "AAMkADY1OT
 Gets a list of all the contacts for the user.
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users"
 import "@pnp/graph/contacts"
+
+const graph = graphfi(...);
 
 const contacts = await graph.users.getById('user@tenant.onmicrosoft.com').contacts();
 
@@ -41,9 +38,11 @@ const contacts2 = await graph.me.contacts();
 Gets a specific contact by ID for the user.
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const contactID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwBGAAAAAAC75QV12PBiRIjb8MNVIrJrBwBgs0NT6NreR57m1u_D8SpPAAAAAAEOAABgs0NT6NreR57m1u_D8SpPAAFCCnApAAA=";
 
@@ -58,10 +57,12 @@ const contact2 = await graph.me.contacts.getById(contactID)();
 Adds a new contact for the user.
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import { EmailAddress } from "@microsoft/microsoft-graph-types";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const addedContact = await graph.users.getById('user@tenant.onmicrosoft.com').contacts.add('Pavel', 'Bansky', [<EmailAddress>{address: 'pavelb@fabrikam.onmicrosoft.com', name: 'Pavel Bansky' }], ['+1 732 555 0102']);
 
@@ -74,9 +75,11 @@ const addedContact2 = await graph.me.contacts.add('Pavel', 'Bansky', [<EmailAddr
 Updates a specific contact by ID for teh designated user
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const contactID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwBGAAAAAAC75QV12PBiRIjb8MNVIrJrBwBgs0NT6NreR57m1u_D8SpPAAAAAAEOAABgs0NT6NreR57m1u_D8SpPAAFCCnApAAA=";
 
@@ -91,9 +94,11 @@ const updContact2 = await graph.me.contacts.getById(contactID).update({birthday:
 Delete a contact from the list of contacts for a user.
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const contactID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwBGAAAAAAC75QV12PBiRIjb8MNVIrJrBwBgs0NT6NreR57m1u_D8SpPAAAAAAEOAABgs0NT6NreR57m1u_D8SpPAAFCCnApAAA=";
 
@@ -108,9 +113,11 @@ const delContact2 = await graph.me.contacts.getById(contactID).delete();
 Get all the folders for the designated user's contacts
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const contactFolders = await graph.users.getById('user@tenant.onmicrosoft.com').contactFolders();
 
@@ -123,9 +130,11 @@ const contactFolders2 = await graph.me.contactFolders();
 Get a contact folder by ID for the specified user
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 
@@ -140,9 +149,11 @@ const contactFolder2 = await graph.me.contactFolders.getById(folderID)();
 Add a new folder in the users contacts
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const parentFolderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAAAAAEOAAA=";
 
@@ -157,9 +168,11 @@ const addedContactFolder2 = await graph.me.contactFolders.add("New Folder", pare
 Update an existing folder in the users contacts
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 
@@ -174,9 +187,11 @@ const updContactFolder2 = await graph.me.contactFolders.getById(folderID).update
 Delete a folder from the users contacts list. Deleting a folder deletes the contacts in that folder.
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 
@@ -191,9 +206,11 @@ const delContactFolder2 = await graph.me.contactFolders.getById(folderID).delete
 Get all the contacts in a folder
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 
@@ -208,9 +225,11 @@ const contactsInContactFolder2 = await graph.me.contactFolders.getById(folderID)
 Get child folders from contact folder
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 
@@ -225,9 +244,11 @@ const childFolders2 = await graph.me.contactFolders.getById(folderID).childFolde
 Add a new child folder to a contact folder
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 
@@ -241,9 +262,11 @@ const addedChildFolder2 = await graph.me.contactFolders.getById(folderID).childF
 Get child folder by ID from user contacts
 
 ```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 const subFolderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqIZAAA=";
@@ -258,10 +281,12 @@ const childFolder2 = await graph.me.contactFolders.getById(folderID).childFolder
 Add a new contact to a child folder
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import { EmailAddress } from "./@microsoft/microsoft-graph-types";
-import "@pnp/graph/users"
-import "@pnp/graph/contacts"
+import "@pnp/graph/users";
+import "@pnp/graph/contacts";
+
+const graph = graphfi(...);
 
 const folderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqH9AAA=";
 const subFolderID = "AAMkADY1OTQ5MTM0LTU2OTktNDI0Yy1iODFjLWNiY2RmMzNjODUxYwAuAAAAAAC75QV12PBiRIjb8MNVIrJrAQBgs0NT6NreR57m1u_D8SpPAAFCCqIZAAA=";

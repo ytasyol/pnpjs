@@ -1,53 +1,36 @@
-import { assign, ITypedHash, isUrlAbsolute, combine, hOP } from "@pnp/common";
+import { isUrlAbsolute, combine, noInherit } from "@pnp/core";
+import { body, cancelableScope } from "@pnp/queryable";
 import {
-    SharePointQueryable,
-    SharePointQueryableCollection,
-    SharePointQueryableInstance,
-    _SharePointQueryableInstance,
-    ISharePointQueryableCollection,
-    _SharePointQueryableCollection,
-    ISharePointQueryableInstance,
-    ISharePointQueryable,
+    _SPCollection,
     spInvokableFactory,
+    _SPInstance,
     deleteableWithETag,
+    SPInstance,
+    ISPInstance,
     IDeleteableWithETag,
-} from "../sharepointqueryable.js";
-import { odataUrlFrom } from "../odata.js";
+    ISPQueryable,
+} from "../spqueryable.js";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
 import { IItem, Item } from "../items/types.js";
-import { body } from "@pnp/odata";
 import { defaultPath } from "../decorators.js";
-import { spPost } from "../operations.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
-import { extractWebUrl } from "../utils/extractweburl.js";
-import { tag } from "../telemetry.js";
-import { toResourcePath, IResourcePath } from "../utils/toResourcePath.js";
+import { spPost, spPostMerge } from "../operations.js";
+import { extractWebUrl } from "../utils/extract-web-url.js";
+import { toResourcePath, IResourcePath } from "../utils/to-resource-path.js";
+import { encodePath } from "../utils/encode-path-str.js";
+import "../context-info/index.js";
+import { IMoveCopyOptions } from "../types.js";
+import { BatchNever } from "../batching.js";
 
 @defaultPath("folders")
-export class _Folders extends _SharePointQueryableCollection<IFolderInfo[]> {
+export class _Folders extends _SPCollection<IFolderInfo[]> {
 
     /**
      * Gets a folder by it's name
      *
      * @param name Folder's name
      */
-    public getByName(name: string): IFolder {
-        return tag.configure(Folder(this).concat(`('${escapeQueryStrValue(name)}')`), "fs.getByName");
-    }
-
-    /**
-     * Adds a new folder at the specified URL
-     *
-     * @param url
-     */
-    @tag("fs.add")
-    public async add(url: string): Promise<IFolderAddResult> {
-
-        const data = await spPost(this.clone(Folders, `add('${escapeQueryStrValue(url)}')`));
-
-        return {
-            data,
-            folder: this.getByName(url),
-        };
+    public getByUrl(name: string): IFolder {
+        return Folder(this).concat(`('${encodePath(name)}')`);
     }
 
     /**
@@ -56,32 +39,23 @@ export class _Folders extends _SharePointQueryableCollection<IFolderInfo[]> {
      * @param serverRelativeUrl The server relative url of the new folder to create
      * @param overwrite True to overwrite an existing folder, default false
      */
-    @tag("fs.addUsingPath")
     public async addUsingPath(serverRelativeUrl: string, overwrite = false): Promise<IFolderAddResult> {
 
-        const data = await spPost(this.clone(Folders, `addUsingPath(DecodedUrl='${escapeQueryStrValue(serverRelativeUrl)}',overwrite=${overwrite})`));
+        const data: IFolderInfo = await spPost(Folders(this, `addUsingPath(DecodedUrl='${encodePath(serverRelativeUrl)}',overwrite=${overwrite})`));
 
         return {
             data,
-            folder: Folder(extractWebUrl(this.toUrl()), `_api/web/getFolderByServerRelativePath(decodedUrl='${escapeQueryStrValue(serverRelativeUrl)}')`),
+            folder: folderFromServerRelativePath(this, data.ServerRelativeUrl),
         };
     }
 }
-export interface IFolders extends _Folders {}
+export interface IFolders extends _Folders { }
 export const Folders = spInvokableFactory<IFolders>(_Folders);
 
 
-export class _Folder extends _SharePointQueryableInstance<IFolderInfo> {
+export class _Folder extends _SPInstance<IFolderInfo> {
 
-    public delete = deleteableWithETag("f");
-
-    /**
-     * Specifies the sequence in which content types are displayed.
-     *
-     */
-    public get contentTypeOrder(): ISharePointQueryableCollection {
-        return tag.configure(SharePointQueryableCollection(this, "contentTypeOrder"), "f.contentTypeOrder");
-    }
+    public delete = deleteableWithETag();
 
     /**
      * Gets this folder's sub folders
@@ -95,8 +69,8 @@ export class _Folder extends _SharePointQueryableInstance<IFolderInfo> {
      * Gets this folder's list item field values
      *
      */
-    public get listItemAllFields(): ISharePointQueryableInstance {
-        return tag.configure(SharePointQueryableInstance(this, "listItemAllFields"), "f.listItemAllFields");
+    public get listItemAllFields(): ISPInstance {
+        return SPInstance(this, "listItemAllFields");
     }
 
     /**
@@ -104,126 +78,105 @@ export class _Folder extends _SharePointQueryableInstance<IFolderInfo> {
      *
      */
     public get parentFolder(): IFolder {
-        return tag.configure(Folder(this, "parentFolder"), "f.parentFolder");
+        return Folder(this, "parentFolder");
     }
 
     /**
      * Gets this folder's properties
      *
      */
-    public get properties(): ISharePointQueryableInstance {
-        return tag.configure(SharePointQueryableInstance(this, "properties"), "f.properties");
+    public get properties(): ISPInstance {
+        return SPInstance(this, "properties");
     }
 
     /**
-     * Gets this folder's server relative url
+     * Gets this folder's storage metrics information
      *
      */
-    public get serverRelativeUrl(): ISharePointQueryable {
-        return tag.configure(SharePointQueryable(this, "serverRelativeUrl"), "f.serverRelativeUrl");
-    }
-
-    /**
-     * Gets a value that specifies the content type order.
-     *
-     */
-    public get uniqueContentTypeOrder(): ISharePointQueryableCollection {
-        return tag.configure(SharePointQueryableCollection(this, "uniqueContentTypeOrder"), "f.uniqueContentTypeOrder");
+    public get storageMetrics(): ISPInstance<IStorageMetrics> {
+        return SPInstance(this, "storagemetrics");
     }
 
     /**
      * Updates folder's properties
      * @param props Folder's properties to update
      */
-    public update = this._update<IFolderUpdateResult, ITypedHash<any>>("SP.Folder", data => ({ data, folder: <any>this }));
+    public async update(props: Partial<IFolderInfo>): Promise<IFolderUpdateResult> {
+
+        const data = await spPostMerge(this, body(props));
+
+        return {
+            data,
+            folder: this,
+        };
+    }
 
     /**
      * Moves the folder to the Recycle Bin and returns the identifier of the new Recycle Bin item.
      */
-    @tag("f.recycle")
     public recycle(): Promise<string> {
-        return spPost(this.clone(Folder, "recycle"));
+        return spPost(Folder(this, "recycle"));
     }
 
     /**
      * Gets the associated list item for this folder, loading the default properties
      */
-    @tag("f.getItem")
     public async getItem<T>(...selects: string[]): Promise<IItem & T> {
-        const q = await this.listItemAllFields.select(...selects)();
-        if (hOP(q, "odata.null") && q["odata.null"]) {
+
+        const q = this.listItemAllFields;
+        const d = await q.select(...selects)();
+        if (d["odata.null"]) {
             throw Error("No associated item was found for this folder. It may be the root folder, which does not have an item.");
         }
-        return assign(Item(odataUrlFrom(q)), q);
+        return Object.assign(Item([this, odataUrlFrom(d)]), d);
     }
 
     /**
-     * Moves a folder to destination path
-     *
-     * @param destUrl Absolute or relative URL of the destination path
-     */
-    @tag("f.moveTo")
-    public async moveTo(destUrl: string): Promise<void> {
-
-        const urlInfo = await this.getParentInfos();
-
-        const uri = new URL(urlInfo.ParentWeb.Url);
-
-        await spPost(Folder(uri.origin, "/_api/SP.MoveCopyUtil.MoveFolder()"),
-            body({
-                destUrl: isUrlAbsolute(destUrl) ? destUrl : combine(uri.origin, destUrl),
-                srcUrl: combine(uri.origin, urlInfo.Folder.ServerRelativeUrl),
-            }));
-    }
-
-    /**
-     * Moves a folder by path to destination path
+     * Moves the file by path to the specified destination url.
      * Also works with different site collections.
      *
-     * @param destUrl Absolute or relative URL of the destination path
-     * @param keepBoth Keep both if folder with the same name in the same location already exists?
+     * @param destUrl The absolute url or server relative url of the destination file path to move to.
+     * @param shouldOverWrite Should a file with the same name in the same location be overwritten?
+     * @param options Allows you to supply the full set of options controlling the move behavior
      */
-    @tag("f.moveByPath")
-    public async moveByPath(destUrl: string, KeepBoth = false): Promise<void> {
+    public async moveByPath(destUrl: string, options: Partial<Omit<IMoveCopyOptions, "ResetAuthorAndCreatedOnCopy">>): Promise<IFolder>;
+    /**
+     * Moves the file by path to the specified destination url.
+     * Also works with different site collections.
+     *
+     * @param destUrl The absolute url or server relative url of the destination file path to move to.
+     * @param keepBoth Keep both if file with the same name in the same location already exists? Only relevant when shouldOverWrite is set to false.
+     */
+    public async moveByPath(destUrl: string, KeepBoth?: boolean): Promise<IFolder>;
+    @cancelableScope
+    public async moveByPath(destUrl: string, ...rest: [Partial<Omit<IMoveCopyOptions, "ResetAuthorAndCreatedOnCopy">>] | [boolean?]): Promise<IFolder> {
 
-        const urlInfo = await this.getParentInfos();
+        let options: Partial<IMoveCopyOptions> = {
+            KeepBoth: false,
+            ShouldBypassSharedLocks: true,
+            RetainEditorAndModifiedOnMove: false,
+        };
 
-        const uri = new URL(urlInfo.ParentWeb.Url);
+        if (rest.length === 1) {
+            if (typeof rest[0] === "boolean") {
+                options.KeepBoth = rest[0];
+            } else if (typeof rest[0] === "object") {
+                options = { ...options, ...rest[0] };
+            }
+        }
 
-        await spPost(Folder(uri.origin, "/_api/SP.MoveCopyUtil.MoveFolderByPath()"),
-            body({
-                destPath: toResourcePath(isUrlAbsolute(destUrl) ? destUrl : combine(uri.origin, destUrl)),
-                options: {
-                    KeepBoth,
-                    ResetAuthorAndCreatedOnCopy: true,
-                    ShouldBypassSharedLocks: true,
-                    __metadata: {
-                        type: "SP.MoveCopyOptions",
-                    },
-                },
-                srcPath: toResourcePath(combine(uri.origin, urlInfo.Folder.ServerRelativeUrl)),
-            }));
+        return this.moveCopyImpl(destUrl, options, "MoveFolderByPath");
     }
 
     /**
-     * Copies a folder to destination path
+     * Moves the folder by path to the specified destination url.
+     * Also works with different site collections.
      *
-     * @param destUrl Absolute or relative URL of the destination path
+     * @param destUrl The absolute url or server relative url of the destination folder path to move to.
+     * @param shouldOverWrite Should a folder with the same name in the same location be overwritten?
+     * @param options Allows you to supply the full set of options controlling the copy behavior
      */
-    @tag("f.copyTo")
-    public async copyTo(destUrl: string): Promise<void> {
-
-        const urlInfo = await this.getParentInfos();
-
-        const uri = new URL(urlInfo.ParentWeb.Url);
-
-        await spPost(Folder(uri.origin, "/_api/SP.MoveCopyUtil.CopyFolder()"),
-            body({
-                destUrl: isUrlAbsolute(destUrl) ? destUrl : combine(uri.origin, destUrl),
-                srcUrl: combine(uri.origin, urlInfo.Folder.ServerRelativeUrl),
-            }));
-    }
-
+    public async copyByPath(destUrl: string, options: Partial<Omit<IMoveCopyOptions, "RetainEditorAndModifiedOnMove">>): Promise<IFolder>;
     /**
      * Copies a folder by path to destination path
      * Also works with different site collections.
@@ -231,26 +184,25 @@ export class _Folder extends _SharePointQueryableInstance<IFolderInfo> {
      * @param destUrl Absolute or relative URL of the destination path
      * @param keepBoth Keep both if folder with the same name in the same location already exists?
      */
-    @tag("f.copyByPath")
-    public async copyByPath(destUrl: string, KeepBoth = false): Promise<void> {
+    public async copyByPath(destUrl: string, KeepBoth?: boolean): Promise<IFolder>;
+    @cancelableScope
+    public async copyByPath(destUrl: string, ...rest: [Partial<Omit<IMoveCopyOptions, "RetainEditorAndModifiedOnMove">>] | [boolean?]): Promise<IFolder> {
 
-        const urlInfo = await this.getParentInfos();
+        let options: Partial<IMoveCopyOptions> = {
+            ShouldBypassSharedLocks: true,
+            ResetAuthorAndCreatedOnCopy: true,
+            KeepBoth: false,
+        };
 
-        const uri = new URL(urlInfo.ParentWeb.Url);
+        if (rest.length === 1) {
+            if (typeof rest[0] === "boolean") {
+                options.KeepBoth = rest[0];
+            } else if (typeof rest[0] === "object") {
+                options = { ...options, ...rest[0] };
+            }
+        }
 
-        await spPost(Folder(uri.origin, "/_api/SP.MoveCopyUtil.CopyFolderByPath()"),
-            body({
-                destPath: toResourcePath(isUrlAbsolute(destUrl) ? destUrl : combine(uri.origin, destUrl)),
-                options: {
-                    KeepBoth: KeepBoth,
-                    ResetAuthorAndCreatedOnCopy: true,
-                    ShouldBypassSharedLocks: true,
-                    __metadata: {
-                        type: "SP.MoveCopyOptions",
-                    },
-                },
-                srcPath: toResourcePath(combine(uri.origin, urlInfo.Folder.ServerRelativeUrl)),
-            }));
+        return this.moveCopyImpl(destUrl, options, "CopyFolderByPath");
     }
 
     /**
@@ -258,9 +210,8 @@ export class _Folder extends _SharePointQueryableInstance<IFolderInfo> {
      *
      * @param parameters Specifies the options to use when deleting a folder.
      */
-    @tag("f.del-params")
     public async deleteWithParams(parameters: Partial<IFolderDeleteParams>): Promise<void> {
-        return spPost(this.clone(Folder, "DeleteWithParameters"), body({ parameters }));
+        return spPost(Folder(this, "DeleteWithParameters"), body({ parameters }));
     }
 
     /**
@@ -269,8 +220,8 @@ export class _Folder extends _SharePointQueryableInstance<IFolderInfo> {
      * @param leafPath leafName of the new folder
      */
     public async addSubFolderUsingPath(leafPath: string): Promise<IFolder> {
-        await spPost(this.clone(Folder, "AddSubFolderUsingPath"), body({ leafPath: toResourcePath(leafPath) }));
-        return this.folders.getByName(leafPath);
+        await spPost(Folder(this, "AddSubFolderUsingPath"), body({ leafPath: toResourcePath(leafPath) }));
+        return this.folders.getByUrl(leafPath);
     }
 
     /**
@@ -314,25 +265,78 @@ export class _Folder extends _SharePointQueryableInstance<IFolderInfo> {
     }
 
     /**
-     * Gets the shareable item associated with this folder
+     * Implementation of folder move/copy
+     *
+     * @param destUrl The server relative path to which the folder will be copied/moved
+     * @param options Any options
+     * @param methodName The method to call
+     * @returns An IFolder representing the moved or copied folder
      */
-    @tag("f.getShareable")
-    protected async getShareable(): Promise<IItem> {
-        // sharing only works on the item end point, not the file one - so we create a folder instance with the item url internally
-        const d = await this.clone(SharePointQueryableInstance, "listItemAllFields", false).select("odata.id")();
+    protected moveCopyImpl(destUrl: string, options: Partial<IMoveCopyOptions>, methodName: "MoveFolderByPath" | "CopyFolderByPath"): Promise<IFolder> {
 
-        let shareable = Item(odataUrlFrom(d));
+        // create a timeline we will manipulate for this request
+        const poster = Folder(this);
 
-        // we need to handle batching
-        if (this.hasBatch) {
-            shareable = shareable.inBatch(this.batch);
-        }
+        // add our pre-request actions, this fixes issues with batching hanging #2668
+        poster.on.pre(noInherit(async (url, init, result) => {
 
-        return shareable;
+            const urlInfo = await Folder(this).using(BatchNever()).getParentInfos();
+
+            const uri = new URL(urlInfo.ParentWeb.Url);
+
+            url = combine(urlInfo.ParentWeb.Url, `/_api/SP.MoveCopyUtil.${methodName}()`);
+
+            init = body({
+                destPath: toResourcePath(isUrlAbsolute(destUrl) ? destUrl : combine(uri.origin, destUrl)),
+                options,
+                srcPath: toResourcePath(combine(uri.origin, urlInfo.Folder.ServerRelativeUrl)),
+            }, init);
+
+            return [url, init, result];
+        }));
+
+        return spPost(poster).then(() => folderFromPath(this, destUrl));
     }
 }
 export interface IFolder extends _Folder, IDeleteableWithETag { }
 export const Folder = spInvokableFactory<IFolder>(_Folder);
+
+/**
+ * Creates an IFolder instance given a base object and a server relative path
+ *
+ * @param base Valid SPQueryable from which the observers will be used and the web url extracted
+ * @param serverRelativePath The server relative url to the folder (ex: '/sites/dev/documents/folder3')
+ * @returns IFolder instance referencing the folder described by the supplied parameters
+ */
+export function folderFromServerRelativePath(base: ISPQueryable, serverRelativePath: string): IFolder {
+
+    return Folder([base, extractWebUrl(base.toUrl())], `_api/web/getFolderByServerRelativePath(decodedUrl='${encodePath(serverRelativePath)}')`);
+}
+
+/**
+ * Creates an IFolder instance given a base object and an absolute path
+ *
+ * @param base Valid SPQueryable from which the observers will be used
+ * @param serverRelativePath The absolute url to the folder (ex: 'https://tenant.sharepoint.com/sites/dev/documents/folder/')
+ * @returns IFolder instance referencing the folder described by the supplied parameters
+ */
+export async function folderFromAbsolutePath(base: ISPQueryable, absoluteFolderPath: string): Promise<IFolder> {
+
+    const { WebFullUrl } = await Folder(this).using(BatchNever()).getContextInfo(absoluteFolderPath);
+    const { pathname } = new URL(absoluteFolderPath);
+    return folderFromServerRelativePath(Folder([base, combine(WebFullUrl, "_api/web")]), decodeURIComponent(pathname));
+}
+
+/**
+ * Creates an IFolder intance given a base object and either an absolute or server relative path to a folder
+ *
+ * @param base Valid SPQueryable from which the observers will be used
+ * @param serverRelativePath server relative or absolute url to the file (ex: 'https://tenant.sharepoint.com/sites/dev/documents/folder' or '/sites/dev/documents/folder')
+ * @returns IFile instance referencing the file described by the supplied parameters
+ */
+export async function folderFromPath(base: ISPQueryable, path: string): Promise<IFolder> {
+    return (isUrlAbsolute(path) ? folderFromAbsolutePath : folderFromServerRelativePath)(base, path);
+}
 
 /**
  * Describes result of adding a folder
@@ -379,6 +383,16 @@ export interface IFolderInfo {
     TimeLastModified: string;
     UniqueId: string;
     WelcomePage: string;
+    ContentTypeOrder: string[];
+    UniqueContentTypeOrder: string[];
+    StorageMetrics?: IStorageMetrics;
+}
+
+export interface IStorageMetrics {
+    LastModified: string;
+    TotalFileCount: number;
+    TotalFileStreamSize: number;
+    TotalSize: number;
 }
 
 export interface IFolderDeleteParams {

@@ -1,68 +1,38 @@
-import { _SharePointQueryable, ISharePointQueryable, spInvokableFactory } from "../sharepointqueryable.js";
-import { assign, ITypedHash } from "@pnp/common";
-import { SPBatch } from "../batch.js";
-import { ICachingOptions, body, IQueryable } from "@pnp/odata";
-import { odataUrlFrom } from "../odata.js";
+import { body } from "@pnp/queryable";
+import { _SPQueryable, spInvokableFactory, ISPQueryable, SPInit } from "../spqueryable.js";
 import { IPrincipalInfo, PrincipalType, PrincipalSource } from "../types.js";
-import { metadata } from "../utils/metadata.js";
-import { File, IFile } from "../files/types.js";
-import { extractWebUrl } from "../utils/extractweburl.js";
+import { extractWebUrl } from "../utils/extract-web-url.js";
 import { spPost } from "../operations.js";
-import { tag } from "../telemetry.js";
-import { objectToSPKeyValueCollection } from "../utils/objectToSPKeyValueCollection.js";
+import { combine } from "@pnp/core";
 
-export class _Utilities extends _SharePointQueryable implements IUtilities {
-    constructor(baseUrl: string | ISharePointQueryable, methodName: string) {
-        const url = typeof baseUrl === "string" ? baseUrl : baseUrl.toUrl();
-        super(extractWebUrl(url), `_api/SP.Utilities.Utility.${methodName}`);
+export class _Utilities extends _SPQueryable implements IUtilities {
+
+    constructor(base: string | ISPQueryable, methodName = "") {
+        super(base);
+        this._url = combine(extractWebUrl(this._url), `_api/SP.Utilities.Utility.${methodName}`);
     }
 
     public excute<T>(props: any): Promise<T> {
         return spPost(this, body(props));
     }
 
-    public sendEmail(props: IEmailProperties): Promise<void> {
-        const params = {
-            properties: assign(metadata("SP.Utilities.EmailProperties"), {
-                Body: props.Body,
-                From: props.From,
-                Subject: props.Subject,
-            }),
-        };
+    public sendEmail(properties: IEmailProperties): Promise<void> {
 
-        if (props.To && props.To.length > 0) {
+        if (properties.AdditionalHeaders) {
 
-            params.properties = assign(params.properties, {
-                To: { results: props.To },
-            });
+            // we have to remap the additional headers into this format #2253
+            properties.AdditionalHeaders = <any>Reflect.ownKeys(properties.AdditionalHeaders).map(key => ({
+                Key: key,
+                Value: Reflect.get(properties.AdditionalHeaders, key),
+                ValueType: "Edm.String",
+            }));
         }
 
-        if (props.CC && props.CC.length > 0) {
-
-            params.properties = assign(params.properties, {
-                CC: { results: props.CC },
-            });
-        }
-
-        if (props.BCC && props.BCC.length > 0) {
-
-            params.properties = assign(params.properties, {
-                BCC: { results: props.BCC },
-            });
-        }
-
-        if (props.AdditionalHeaders) {
-
-            params.properties = assign(params.properties, {
-                AdditionalHeaders: objectToSPKeyValueCollection(props.AdditionalHeaders),
-            });
-        }
-
-        return tag.configure(this.clone(UtilitiesCloneFactory, "SendEmail", true), "u.sendEmail").excute<void>(params);
+        return UtilitiesCloneFactory(this, "SendEmail").excute<void>({ properties });
     }
 
     public getCurrentUserEmailAddresses(): Promise<string> {
-        return tag.configure(this.clone(UtilitiesCloneFactory, "GetCurrentUserEmailAddresses", true), "u.getCurrentUserEmailAddresses").excute<string>({});
+        return UtilitiesCloneFactory(this, "GetCurrentUserEmailAddresses").excute<string>({});
     }
 
     public resolvePrincipal(input: string,
@@ -80,8 +50,7 @@ export class _Utilities extends _SharePointQueryable implements IUtilities {
             sources,
         };
 
-        const clone = this.clone(UtilitiesCloneFactory, "ResolvePrincipalInCurrentContext", true);
-        return tag.configure(clone, "u.ResolvePrincipalInCurrentContext").excute<IPrincipalInfo>(params);
+        return UtilitiesCloneFactory(this, "ResolvePrincipalInCurrentContext").excute<IPrincipalInfo>(params);
     }
 
     public searchPrincipals(input: string, scopes: PrincipalType, sources: PrincipalSource, groupName: string, maxCount: number): Promise<IPrincipalInfo[]> {
@@ -93,8 +62,7 @@ export class _Utilities extends _SharePointQueryable implements IUtilities {
             sources: sources,
         };
 
-        const clone = this.clone(UtilitiesCloneFactory, "SearchPrincipalsUsingContextWeb", true);
-        return tag.configure(clone, "u.SearchPrincipalsUsingContextWeb").excute<IPrincipalInfo[]>(params);
+        return UtilitiesCloneFactory(this, "SearchPrincipalsUsingContextWeb").excute<IPrincipalInfo[]>(params);
     }
 
     public createEmailBodyForInvitation(pageAddress: string): Promise<string> {
@@ -102,8 +70,7 @@ export class _Utilities extends _SharePointQueryable implements IUtilities {
             pageAddress: pageAddress,
         };
 
-        const clone = this.clone(UtilitiesCloneFactory, "CreateEmailBodyForInvitation", true);
-        return tag.configure(clone, "u.CreateEmailBodyForInvitation").excute<string>(params);
+        return UtilitiesCloneFactory(this, "CreateEmailBodyForInvitation").excute<string>(params);
     }
 
     public expandGroupsToPrincipals(inputs: string[], maxCount = 30): Promise<IPrincipalInfo[]> {
@@ -112,19 +79,8 @@ export class _Utilities extends _SharePointQueryable implements IUtilities {
             maxCount: maxCount,
         };
 
-        const clone = this.clone(UtilitiesCloneFactory, "ExpandGroupsToPrincipals", true);
-        return tag.configure(clone, "u.ExpandGroupsToPrincipals").excute<IPrincipalInfo[]>(params);
-    }
-
-    public async createWikiPage(info: IWikiPageCreationInfo): Promise<ICreateWikiPageResult> {
-
-        const clone = this.clone(UtilitiesCloneFactory, "CreateWikiPageInContextWeb", true);
-        const newPage = await tag.configure(clone, "u.CreateWikiPageInContextWeb").excute<ICreateWikiPageResult>({ parameters: info });
-
-        return {
-            data: newPage,
-            file: File(odataUrlFrom(newPage)),
-        } as ICreateWikiPageResult;
+        const clone = UtilitiesCloneFactory(this, "ExpandGroupsToPrincipals");
+        return clone.excute<IPrincipalInfo[]>(params);
     }
 }
 
@@ -132,17 +88,6 @@ export class _Utilities extends _SharePointQueryable implements IUtilities {
  * Describes the SharePoint utility methods
  */
 export interface IUtilities {
-    /**
-     * Gives you the ability to cache returned data in an easy way.
-     * @param options instance of ICachingOptions
-     */
-    usingCaching(options?: ICachingOptions): this;
-
-    /**
-     * Gives you the ability to batch multiple requests into a single request to SharePoint.
-     * @param batch instance of SPBatch
-     */
-    inBatch(batch: SPBatch): this;
 
     /**
      * This methods will send an e-mail based on the incoming properties of the IEmailProperties parameter.
@@ -193,29 +138,11 @@ export interface IUtilities {
      * @param maxCount Specifies the maximum number of principals to be returned.
      */
     expandGroupsToPrincipals(inputs: string[], maxCount?: number): Promise<IPrincipalInfo[]>;
-
-    /**
-     * Creates a new Wiki page.
-     * @param info Instance of IWikiPageCreationInfo.
-     */
-    createWikiPage(info: IWikiPageCreationInfo): Promise<ICreateWikiPageResult>;
 }
 
-export const Utilities = spInvokableFactory<IUtilities & Pick<IQueryable<any>, "configure" | "setRuntime" | "getRuntime">>(_Utilities);
-type UtilitiesCloneType = IUtilities & ISharePointQueryable & { excute<T>(props: any): Promise<T> };
-const UtilitiesCloneFactory = (baseUrl: string | ISharePointQueryable, path?: string): UtilitiesCloneType => <any>Utilities(baseUrl, path);
-
-export interface ICreateWikiPageResult {
-    /**
-     * The returned Wiki page represented by raw data.
-     */
-    data: any;
-
-    /**
-     * The returned Wiki page represented as a file which can be further updated.
-     */
-    file: IFile;
-}
+export const Utilities: (base: SPInit, path?: string) => IUtilities = <any>spInvokableFactory(_Utilities);
+type UtilitiesCloneType = IUtilities & ISPQueryable & { excute<T>(props: any): Promise<T> };
+const UtilitiesCloneFactory = (base: SPInit, path?: string): UtilitiesCloneType => <any>Utilities(base, path);
 
 export interface IEmailProperties {
     /**
@@ -248,7 +175,7 @@ export interface IEmailProperties {
     /**
      * The additional headers appened to the request in key/value pairs.
      */
-    AdditionalHeaders?: ITypedHash<string>;
+    AdditionalHeaders?: Record<string, string>;
 
     /**
      * The from address of the email.

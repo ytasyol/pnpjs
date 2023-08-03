@@ -1,6 +1,5 @@
-import { Web, IWeb } from "./types.js";
-import { SPRest } from "../rest.js";
-import { SPBatch } from "../batch.js";
+import { Web } from "./types.js";
+import { SPFI } from "../fi.js";
 
 export {
     IWeb,
@@ -14,32 +13,20 @@ export {
     IWebInfosData,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
 
         /**
          * Access to the current web instance
          */
-        readonly web: IWeb;
-
-        /**
-         * Creates a new batch object for use with the SharePointQueryable.addToBatch method
-         *
-         */
-        createBatch(): SPBatch;
+        readonly web: ReturnType<typeof Web>;
     }
 }
 
-Reflect.defineProperty(SPRest.prototype, "web", {
+Reflect.defineProperty(SPFI.prototype, "web", {
     configurable: true,
     enumerable: true,
-    get: function (this: SPRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return Web(baseUrl).configure(options).setRuntime(runtime);
-        });
+    get: function (this: SPFI) {
+        return this.create(Web);
     },
 });
-
-SPRest.prototype.createBatch = function (this: SPRest): SPBatch {
-    return this.web.createBatch();
-};

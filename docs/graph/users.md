@@ -8,26 +8,26 @@ You can learn more about Microsoft Graph users by reading the [Official Microsof
 
 [![Invokable Banner](https://img.shields.io/badge/Invokable-informational.svg)](../concepts/invokable.md) [![Selective Imports Banner](https://img.shields.io/badge/Selective%20Imports-informational.svg)](../concepts/selective-imports.md)  
 
-|Scenario|Import Statement|
-|--|--|
-|Selective 1|import { graph } from "@pnp/graph";<br />import {IUser, IUsers, User, Users, IPeople, People} from "@pnp/graph/users";|
-|Selective 2|import { graph } from "@pnp/graph";<br />import "@pnp/graph/users";|
-|Preset: All|import { graph,IUser, IUsers, User, Users, IPeople, People } from "@pnp/graph/presets/all";|
-
 ## Current User
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
+
+const graph = graphfi(...);
 
 const currentUser = await graph.me();
 ```
 
-## Get All Users in the Organization
+## Get Users in the Organization
+
+> If you want to get all users you will need to [use paging](./behaviors.md#paged)
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
+
+const graph = graphfi(...);
 
 const allUsers = await graph.users();
 ```
@@ -35,17 +35,33 @@ const allUsers = await graph.users();
 ## Get a User by email address (or user id)
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
 
+const graph = graphfi(...);
+
 const matchingUser = await graph.users.getById('jane@contoso.com')();
+```
+
+## User Properties
+
+```TypeScript
+import { graphfi } from "@pnp/graph";
+import "@pnp/graph/users";
+
+const graph = graphfi(...);
+
+await graph.me.memberOf();
+await graph.me.transitiveMemberOf();
 ```
 
 ## Update Current User
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
+
+const graph = graphfi(...);
 
 await graph.me.update({
     displayName: 'John Doe'
@@ -55,20 +71,10 @@ await graph.me.update({
 ## People
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
 
-const people = await graph.me.people();
-
-// get the top 3 people
-const people = await graph.me.people.top(3)();
-```
-
-## People
-
-```TypeScript
-import { graph } from "@pnp/graph";
-import "@pnp/graph/users";
+const graph = graphfi(...);
 
 const people = await graph.me.people();
 
@@ -79,8 +85,10 @@ const people = await graph.me.people.top(3)();
 ## Manager
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
+
+const graph = graphfi(...);
 
 const manager = await graph.me.manager();
 ```
@@ -88,8 +96,10 @@ const manager = await graph.me.manager();
 ## Direct Reports
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
+
+const graph = graphfi(...);
 
 const reports = await graph.me.directReports();
 ```
@@ -97,9 +107,11 @@ const reports = await graph.me.directReports();
 ## Photo
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
 import "@pnp/graph/photos";
+
+const graph = graphfi(...);
 
 const currentUser = await graph.me.photo();
 const specificUser = await graph.users.getById('jane@contoso.com').photo();
@@ -108,3 +120,15 @@ const specificUser = await graph.users.getById('jane@contoso.com').photo();
 ## User Photo Operations
 
 See [Photos](./photos.md)
+
+## User Presence Operation
+
+See [Cloud Communications](./cloud-communications.md)
+
+## User Messages (Mail)
+
+See [Messages](./messages.md)
+
+## User OneDrive
+
+See [OneDrive](./onedrive.md)

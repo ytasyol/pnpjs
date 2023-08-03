@@ -1,11 +1,9 @@
 import { _Web, Web } from "../webs/types.js";
 import { ISharingEmailData, ISharingResult, SharingRole } from "./types.js";
-import { _SharePointQueryableInstance } from "../sharepointqueryable.js";
-import { extractWebUrl } from "../utils/extractweburl.js";
 import { RoleType } from "./types.js";
 import { shareObject } from "./funcs.js";
-import { combine } from "@pnp/common";
-import { body } from "@pnp/odata";
+import { combine } from "@pnp/core";
+import { body } from "@pnp/queryable";
 import { spPost } from "../operations.js";
 
 /**
@@ -41,7 +39,7 @@ declare module "../webs/types" {
 }
 
 /**
- * Shares this web with the supplied users
+ * Shares this web with the supplied users (not supported for batching)
  * @param loginNames The resolved login names to share
  * @param role The role to share this web
  * @param emailData Optional email data
@@ -52,14 +50,9 @@ _Web.prototype.shareWith = async function (
     role: SharingRole = SharingRole.View,
     emailData?: ISharingEmailData): Promise<ISharingResult> {
 
-    const dependency = this.addBatchDependency();
-    // remove need to reference Web here, which created a circular build issue
-    const web = new _SharePointQueryableInstance(extractWebUrl(this.toUrl()), "/_api/web/url");
+    const url = await this.select("Url")();
 
-    const url = await web.get();
-    dependency();
-
-    return this.shareObject(combine(url, "/_layouts/15/aclinv.aspx?forSharing=1&mbypass=1"), loginNames, role, emailData);
+    return this.shareObject(combine(url.Url, "/_layouts/15/aclinv.aspx?forSharing=1&mbypass=1"), loginNames, role, emailData);
 };
 
 /**

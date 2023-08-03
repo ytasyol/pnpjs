@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _List } from "../lists/types.js";
 import { Forms, IForms } from "./types.js";
 
@@ -11,4 +11,4 @@ declare module "../lists/types" {
     }
 }
 
-addProp(_List, "forms", Forms, "forms");
+addProp(_List, "forms", Forms);

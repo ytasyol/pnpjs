@@ -1,22 +1,28 @@
 import { User as IUser } from "@microsoft/microsoft-graph-types";
-import { graph } from "@pnp/graph";
 import "@pnp/graph/users";
 import { Logger, LogLevel } from "@pnp/logging";
-import { testSettings } from "../../main.js";
+import { stringIsNullOrEmpty } from "@pnp/core";
+import { Context } from "mocha";
 
 let cachedValidUser = null;
 const usersToCheck = 20;
 
-export default async function getValidUser(ignoreCache = false): Promise<IUser> {
+export default async function getValidUser(this: Context, ignoreCache = false): Promise<IUser> {
 
     if (!ignoreCache && cachedValidUser !== null) {
         return cachedValidUser;
     }
 
-    const testUserName = testSettings.testUser.substr(testSettings.testUser.lastIndexOf("|") + 1);
+    const username = this.pnp.settings.testUser;
+
+    if(stringIsNullOrEmpty(username)) {
+        throw Error(`getValidUser: ${this.pnp.settings.testUser} is not defined. A test calling this should skip.`);
+    }
+
+    const testUserName = username.substring(username.lastIndexOf("|") + 1);
 
     try {
-        cachedValidUser = await graph.users.getById(testUserName)();
+        cachedValidUser = await this.pnp.graph.users.getById(testUserName)();
     } catch (e) {
         cachedValidUser = null;
         Logger.write(`getValidUser: Failed looking up user '${testUserName}'`, LogLevel.Verbose);

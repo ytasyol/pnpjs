@@ -1,21 +1,19 @@
+import { addProp } from "@pnp/queryable";
 import { _Web } from "../webs/types.js";
 import { AppCatalog, IAppCatalog } from "./types.js";
 
 declare module "../webs/types" {
     interface _Web {
-        getAppCatalog(url?: string | _Web): IAppCatalog;
+        appcatalog: IAppCatalog;
     }
     interface IWeb {
         /**
-         * Gets this web (default) or the web specifed by the optional string case
-         * as an IAppCatalog instance
-         *
-         * @param url [Optional] Url of the web to get (default: current web)
+         * Gets the appcatalog (if it exists associated with this web)
          */
-        getAppCatalog(url?: string | _Web): IAppCatalog;
+        appcatalog: IAppCatalog;
     }
 }
 
-_Web.prototype.getAppCatalog = function (this: _Web, url?: string | _Web): IAppCatalog {
-    return AppCatalog(url || this);
-};
+// we use this function to wrap the AppCatalog as we want to ignore any path values addProp
+// will pass and use the defaultPath defined for AppCatalog
+addProp(_Web, "appcatalog", (s: _Web) => AppCatalog(s, "_api/web/sitecollectionappcatalog/AvailableApps"));

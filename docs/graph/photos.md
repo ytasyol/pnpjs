@@ -8,20 +8,16 @@ You can learn more about Microsoft Graph users by reading the [Official Microsof
 
 [![Selective Imports Banner](https://img.shields.io/badge/Selective%20Imports-informational.svg)](../concepts/selective-imports.md)  
 
-|Scenario|Import Statement|
-|--|--|
-|Selective 1|import { graph } from "@pnp/graph";<br />import {IPhoto, Photo} from "@pnp/graph/photos";|
-|Selective 2|import { graph } from "@pnp/graph";<br />import "@pnp/graph/photos";|
-|Preset: All|import { graph, IPhoto, Photo } from "@pnp/sp/presets/all";|
-
 ## Current User Photo
 
 This example shows the getBlob() endpoint, there is also a getBuffer() endpoint to support node.js
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
 import "@pnp/graph/photos";
+
+const graph = graphfi(...);
 
 const photoValue = await graph.me.photo.getBlob();
 const url = window.URL || window.webkitURL;
@@ -34,9 +30,11 @@ document.getElementById("photoElement").setAttribute("src", blobUrl);
 This example shows the getBlob() endpoint, there is also a getBuffer() endpoint to support node.js
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/groups";
 import "@pnp/graph/photos";
+
+const graph = graphfi(...);
 
 const photoValue = await graph.groups.getById("7d2b9355-0891-47d3-84c8-bf2cd9c62177").photo.getBlob();
 const url = window.URL || window.webkitURL;
@@ -47,9 +45,11 @@ document.getElementById("photoElement").setAttribute("src", blobUrl);
 ## Set User Photo
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
 import "@pnp/graph/photos";
+
+const graph = graphfi(...);
 
 const input = <HTMLInputElement>document.getElementById("thefileinput");
 const file = input.files[0];
@@ -59,9 +59,11 @@ await graph.me.photo.setContent(file);
 ## Set Group Photo
 
 ```TypeScript
-import { graph } from "@pnp/graph";
+import { graphfi } from "@pnp/graph";
 import "@pnp/graph/users";
 import "@pnp/graph/photos";
+
+const graph = graphfi(...);
 
 const input = <HTMLInputElement>document.getElementById("thefileinput");
 const file = input.files[0];

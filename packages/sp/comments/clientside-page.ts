@@ -1,10 +1,8 @@
 import { _ClientsidePage } from "../clientside-pages/types.js";
-import { ICommentInfo, IComment, Comment, ILikedByInformation } from "./types.js";
-import { spODataEntity } from "../odata.js";
-import { tag } from "../telemetry.js";
+import { ICommentInfo, IComment, ILikedByInformation } from "./types.js";
 import { IItemUpdateResult, Item } from "../items/index.js";
 import { spPost } from "../operations.js";
-import { SharePointQueryable } from "../sharepointqueryable.js";
+import { SPQueryable } from "../spqueryable.js";
 
 declare module "../clientside-pages/types" {
     interface _ClientsidePage {
@@ -25,7 +23,7 @@ declare module "../clientside-pages/types" {
          *
          * @param info The comment information
          */
-        addComment(info: string | ICommentInfo): Promise<IComment & ICommentInfo>;
+        addComment(info: string | Partial<ICommentInfo>): Promise<IComment & ICommentInfo>;
         /**
          *
          * @param id gets a comment by id
@@ -71,7 +69,8 @@ _ClientsidePage.prototype.addComment = async function (this: _ClientsidePage, in
 _ClientsidePage.prototype.getCommentById = async function (this: _ClientsidePage, id: string | number): Promise<IComment & ICommentInfo> {
 
     const item = await this.getItem();
-    return item.comments.getById(id).usingParser(spODataEntity(Comment))();
+    const data = await item.comments.getById(id)();
+    return Object.assign(item.comments.getById(id), data);
 };
 
 _ClientsidePage.prototype.clearComments = async function (this: _ClientsidePage): Promise<boolean> {
@@ -83,17 +82,17 @@ _ClientsidePage.prototype.clearComments = async function (this: _ClientsidePage)
 _ClientsidePage.prototype.getComments = async function (this: _ClientsidePage): Promise<ICommentInfo[]> {
 
     const item = await this.getItem();
-    return tag.configure(item, "").comments();
+    return item.comments();
 };
 
 _ClientsidePage.prototype.like = async function (this: _ClientsidePage): Promise<void> {
     const item = await this.getItem("ID");
-    return spPost<void>(SharePointQueryable(item, "like"));
+    return spPost<void>(SPQueryable(item, "like"));
 };
 
 _ClientsidePage.prototype.unlike = async function (this: _ClientsidePage): Promise<void> {
     const item = await this.getItem("ID");
-    return spPost<void>(SharePointQueryable(item, "unlike"));
+    return spPost<void>(SPQueryable(item, "unlike"));
 };
 
 _ClientsidePage.prototype.getLikedByInformation = async function (this: _ClientsidePage): Promise<ILikedByInformation> {
@@ -102,7 +101,6 @@ _ClientsidePage.prototype.getLikedByInformation = async function (this: _Clients
 };
 
 _ClientsidePage.prototype.enableComments = async function (this: _ClientsidePage): Promise<IItemUpdateResult> {
-    tag.configure(this, "csp.enableComments");
     return this.setCommentsOn(true).then(r => {
         this.commentsDisabled = false;
         return r;
@@ -110,7 +108,6 @@ _ClientsidePage.prototype.enableComments = async function (this: _ClientsidePage
 };
 
 _ClientsidePage.prototype.disableComments = async function (this: _ClientsidePage): Promise<IItemUpdateResult> {
-    tag.configure(this, "csp.disableComments");
     return this.setCommentsOn(false).then(r => {
         this.commentsDisabled = true;
         return r;

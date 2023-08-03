@@ -1,7 +1,7 @@
-import { addProp, body } from "@pnp/odata";
+import { addProp, body } from "@pnp/queryable";
 import { _Web, Web } from "../webs/types.js";
 import { ISiteUsers, SiteUsers, ISiteUser, SiteUser, IWebEnsureUserResult } from "./types.js";
-import { odataUrlFrom } from "../odata.js";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
 import { spPost } from "../operations.js";
 
 declare module "../webs/types" {
@@ -40,14 +40,14 @@ declare module "../webs/types" {
 }
 
 addProp(_Web, "siteUsers", SiteUsers);
-addProp(_Web, "currentUser", SiteUser, "currentuser");
+addProp(_Web, "currentUser", SiteUser);
 
 _Web.prototype.ensureUser = async function (this: _Web, logonName: string): Promise<IWebEnsureUserResult> {
 
-    const data = await spPost(this.clone(Web, "ensureuser"), body({ logonName }));
+    const data = await spPost(Web(this, "ensureuser"), body({ logonName }));
     return {
         data,
-        user: SiteUser(odataUrlFrom(data)),
+        user: SiteUser([this, odataUrlFrom(data)]),
     };
 };
 

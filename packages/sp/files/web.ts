@@ -1,22 +1,14 @@
+import { encodePath } from "../utils/encode-path-str.js";
 import { _Web } from "../webs/types.js";
-import { File, IFile } from "./types.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
+import { File, fileFromServerRelativePath, IFile } from "./types.js";
 
 declare module "../webs/types" {
     interface _Web {
-        getFileByServerRelativeUrl(fileRelativeUrl: string): IFile;
         getFileByServerRelativePath(fileRelativeUrl: string): IFile;
         getFileById(uniqueId: string): IFile;
         getFileByUrl(fileUrl: string): IFile;
     }
     interface IWeb {
-
-        /**
-         * Gets a file by server relative url
-         *
-         * @param fileRelativeUrl The server relative path to the file (including /sites/ if applicable)
-         */
-        getFileByServerRelativeUrl(fileRelativeUrl: string): IFile;
 
         /**
          * Gets a file by server relative url if your file name contains # and % characters
@@ -41,12 +33,8 @@ declare module "../webs/types" {
     }
 }
 
-_Web.prototype.getFileByServerRelativeUrl = function (this: _Web, fileRelativeUrl: string): IFile {
-    return File(this, `getFileByServerRelativeUrl('${escapeQueryStrValue(fileRelativeUrl)}')`);
-};
-
 _Web.prototype.getFileByServerRelativePath = function (this: _Web, fileRelativeUrl: string): IFile {
-    return File(this, `getFileByServerRelativePath(decodedUrl='${escapeQueryStrValue(fileRelativeUrl)}')`);
+    return fileFromServerRelativePath(this, fileRelativeUrl);
 };
 
 _Web.prototype.getFileById = function (this: _Web, uniqueId: string): IFile {
@@ -54,5 +42,5 @@ _Web.prototype.getFileById = function (this: _Web, uniqueId: string): IFile {
 };
 
 _Web.prototype.getFileByUrl = function (this: _Web, fileUrl: string): IFile {
-    return File(this, `getFileByUrl('!@p1::${escapeQueryStrValue(fileUrl)}')`);
+    return File(this, `getFileByUrl('${encodePath("!@p1::" + fileUrl)}')`);
 };

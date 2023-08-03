@@ -1,6 +1,5 @@
 import { _GraphQueryableInstance, _GraphQueryableCollection, graphInvokableFactory } from "../graphqueryable.js";
-import { assign } from "@pnp/common";
-import { body } from "@pnp/odata";
+import { body } from "@pnp/queryable";
 import { Subscription as ISubscriptionType } from "@microsoft/microsoft-graph-types";
 import { defaultPath, deleteable, IDeleteable, IUpdateable, updateable, getById, IGetById } from "../decorators.js";
 import { graphPost } from "../operations.js";
@@ -32,12 +31,13 @@ export class _Subscriptions extends _GraphQueryableCollection<ISubscriptionType[
      */
     public async add(changeType: string, notificationUrl: string, resource: string, expirationDateTime: string, props: ISubscriptionType = {}): Promise<ISubAddResult> {
 
-        const postBody = assign({
+        const postBody = {
             changeType,
             expirationDateTime,
             notificationUrl,
             resource,
-        }, props);
+            ...props,
+        };
 
         const data = await graphPost(this, body(postBody));
 
@@ -47,7 +47,7 @@ export class _Subscriptions extends _GraphQueryableCollection<ISubscriptionType[
         };
     }
 }
-export interface ISubscriptions extends _Subscriptions, IGetById<ISubscription> {}
+export interface ISubscriptions extends _Subscriptions, IGetById<ISubscription> { }
 export const Subscriptions = graphInvokableFactory<ISubscriptions>(_Subscriptions);
 
 /**

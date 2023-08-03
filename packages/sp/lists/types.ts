@@ -1,33 +1,31 @@
-import { assign, dateAdd, hOP, isArray, objectDefinedNotNull } from "@pnp/common";
-import { body, headers } from "@pnp/odata";
+import { hOP, isArray, objectDefinedNotNull } from "@pnp/core";
+import { body, headers, TextParse } from "@pnp/queryable";
 import {
-    SharePointQueryable,
-    SharePointQueryableCollection,
-    ISharePointQueryableCollection,
-    _SharePointQueryableInstance,
-    _SharePointQueryableCollection,
-    ISharePointQueryable,
+    _SPCollection,
     spInvokableFactory,
+    _SPInstance,
     deleteableWithETag,
+    SPQueryable,
+    ISPQueryable,
+    ISPCollection,
+    SPCollection,
     IDeleteableWithETag,
-} from "../sharepointqueryable.js";
+} from "../spqueryable.js";
 import { IChangeQuery } from "../types.js";
-import { odataUrlFrom } from "../odata.js";
-import { metadata } from "../utils/metadata.js";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
 import { defaultPath } from "../decorators.js";
-import { spPost } from "../operations.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
-import { tag } from "../telemetry.js";
+import { spPost, spPostMerge } from "../operations.js";
 import { IBasePermissions } from "../security/types.js";
 import { IFieldInfo } from "../fields/types.js";
 import { IFormInfo } from "../forms/types.js";
 import { IFolderInfo } from "../folders/types.js";
 import { IViewInfo } from "../views/types.js";
 import { IUserCustomActionInfo } from "../user-custom-actions/types.js";
-import { IResourcePath, toResourcePath } from "../utils/toResourcePath.js";
+import { IResourcePath, toResourcePath } from "../utils/to-resource-path.js";
+import { encodePath } from "../utils/encode-path-str.js";
 
 @defaultPath("lists")
-export class _Lists extends _SharePointQueryableCollection<IListInfo[]> {
+export class _Lists extends _SPCollection<IListInfo[]> {
 
     /**
      * Gets a list from the collection by guid id
@@ -35,7 +33,7 @@ export class _Lists extends _SharePointQueryableCollection<IListInfo[]> {
      * @param id The Id of the list (GUID)
      */
     public getById(id: string): IList {
-        return tag.configure(List(this).concat(`('${id}')`), "ls.getById");
+        return List(this).concat(`('${id}')`);
     }
 
     /**
@@ -44,7 +42,7 @@ export class _Lists extends _SharePointQueryableCollection<IListInfo[]> {
      * @param title The title of the list
      */
     public getByTitle(title: string): IList {
-        return tag.configure(List(this, `getByTitle('${escapeQueryStrValue(title)}')`), "ls.getByTitle");
+        return List(this, `getByTitle('${encodePath(title)}')`);
     }
 
     /**
@@ -56,16 +54,16 @@ export class _Lists extends _SharePointQueryableCollection<IListInfo[]> {
      * @param enableContentTypes If true content types will be allowed and enabled, otherwise they will be disallowed and not enabled
      * @param additionalSettings Will be passed as part of the list creation body
      */
-    @tag("ls.add")
     public async add(title: string, desc = "", template = 100, enableContentTypes = false, additionalSettings: Partial<IListInfo> = {}): Promise<IListAddResult> {
 
-        const addSettings = Object.assign({
+        const addSettings = {
             "AllowContentTypes": enableContentTypes,
             "BaseTemplate": template,
             "ContentTypesEnabled": enableContentTypes,
             "Description": desc,
             "Title": title,
-        }, metadata("SP.List"), additionalSettings);
+            ...additionalSettings,
+        };
 
         const data = await spPost(this, body(addSettings));
 
@@ -81,7 +79,6 @@ export class _Lists extends _SharePointQueryableCollection<IListInfo[]> {
      * @param enableContentTypes If true content types will be allowed and enabled, otherwise they will be disallowed and not enabled
      * @param additionalSettings Will be passed as part of the list creation body or used to update an existing list
      */
-    @tag("ls.ensure")
     public async ensure(
         title: string,
         desc = "",
@@ -89,19 +86,16 @@ export class _Lists extends _SharePointQueryableCollection<IListInfo[]> {
         enableContentTypes = false,
         additionalSettings: Partial<IListInfo> = {}): Promise<IListEnsureResult> {
 
-        if (this.hasBatch) {
-            throw Error("The ensure list method is not supported for use in a batch.");
-        }
-
-        const addOrUpdateSettings = assign(additionalSettings, { Title: title, Description: desc, ContentTypesEnabled: enableContentTypes }, true);
+        const addOrUpdateSettings = { Title: title, Description: desc, ContentTypesEnabled: enableContentTypes, ...additionalSettings };
 
         const list: IList = this.getByTitle(addOrUpdateSettings.Title);
 
         try {
 
-            // this will throw if the list doesn't exist
             await list.select("Title")();
+
             const data = await list.update(addOrUpdateSettings).then(r => r.data);
+
             return { created: false, data, list: this.getByTitle(addOrUpdateSettings.Title) };
 
         } catch (e) {
@@ -114,58 +108,56 @@ export class _Lists extends _SharePointQueryableCollection<IListInfo[]> {
     /**
      * Gets a list that is the default asset location for images or other files, which the users upload to their wiki pages.
      */
-    @tag("ls.ensureSiteAssetsLibrary")
     public async ensureSiteAssetsLibrary(): Promise<IList> {
-        const json = await spPost(this.clone(Lists, "ensuresiteassetslibrary"));
-        return List(odataUrlFrom(json));
+        const json = await spPost(Lists(this, "ensuresiteassetslibrary"));
+        return List([this, odataUrlFrom(json)]);
     }
 
     /**
      * Gets a list that is the default location for wiki pages.
      */
-    @tag("ls.ensureSitePagesLibrary")
     public async ensureSitePagesLibrary(): Promise<IList> {
-        const json = await spPost(this.clone(Lists, "ensuresitepageslibrary"));
-        return List(odataUrlFrom(json));
+        const json = await spPost(Lists(this, "ensuresitepageslibrary"));
+        return List([this, odataUrlFrom(json)]);
     }
 }
 export interface ILists extends _Lists { }
 export const Lists = spInvokableFactory<ILists>(_Lists);
 
-export class _List extends _SharePointQueryableInstance<IListInfo> {
+export class _List extends _SPInstance<IListInfo> {
 
-    public delete = deleteableWithETag("l");
+    public delete = deleteableWithETag();
 
     /**
      * Gets the effective base permissions of this list
      *
      */
-    public get effectiveBasePermissions(): ISharePointQueryable {
-        return tag.configure(SharePointQueryable(this, "EffectiveBasePermissions"), "l.effectiveBasePermissions");
+    public get effectiveBasePermissions(): ISPQueryable {
+        return SPQueryable(this, "EffectiveBasePermissions");
     }
 
     /**
      * Gets the event receivers attached to this list
      *
      */
-    public get eventReceivers(): ISharePointQueryableCollection {
-        return tag.configure(SharePointQueryableCollection(this, "EventReceivers"), "l.eventReceivers");
+    public get eventReceivers(): ISPCollection {
+        return SPCollection(this, "EventReceivers");
     }
 
     /**
      * Gets the related fields of this list
      *
      */
-    public get relatedFields(): ISharePointQueryable {
-        return tag.configure(SharePointQueryable(this, "getRelatedFields"), "l.relatedFields");
+    public get relatedFields(): ISPQueryable {
+        return SPQueryable(this, "getRelatedFields");
     }
 
     /**
      * Gets the IRM settings for this list
      *
      */
-    public get informationRightsManagementSettings(): ISharePointQueryable {
-        return tag.configure(SharePointQueryable(this, "InformationRightsManagementSettings"), "l.informationRightsManagementSettings");
+    public get informationRightsManagementSettings(): ISPQueryable {
+        return SPQueryable(this, "InformationRightsManagementSettings");
     }
 
     /**
@@ -174,17 +166,11 @@ export class _List extends _SharePointQueryableInstance<IListInfo> {
      * @param properties A plain object hash of values to update for the list
      * @param eTag Value used in the IF-Match header, by default "*"
      */
-    @tag("l.update")
     public async update(properties: Partial<IListInfo>, eTag = "*"): Promise<IListUpdateResult> {
 
-        const postBody = body(assign(metadata("SP.List"), properties), headers({
-            "IF-Match": eTag,
-            "X-HTTP-Method": "MERGE",
-        }));
+        const data = await spPostMerge(this, body(properties, headers({ "IF-Match": eTag })));
 
-        const data = await spPost(this, postBody);
-
-        const list: IList = hOP(properties, "Title") ? this.getParent(List, this.parentUrl, `getByTitle('${properties.Title}')`) : List(this);
+        const list: IList = hOP(properties, "Title") ? this.getParent(List, `getByTitle('${properties.Title}')`) : List(this);
 
         return {
             data,
@@ -196,10 +182,8 @@ export class _List extends _SharePointQueryableInstance<IListInfo> {
      * Returns the collection of changes from the change log that have occurred within the list, based on the specified query.
      * @param query A query that is performed against the change log.
      */
-    @tag("l.getChanges")
     public getChanges(query: IChangeQuery): Promise<any> {
-
-        return spPost(this.clone(List, "getchanges"), body({ query: assign(metadata("SP.ChangeQuery"), query) }));
+        return spPost(List(this, "getchanges"), body({ query }));
     }
 
     /**
@@ -207,50 +191,37 @@ export class _List extends _SharePointQueryableInstance<IListInfo> {
      * @param query A query that is performed against the list
      * @param expands An expanded array of n items that contains fields to expand in the CamlQuery
      */
-    @tag("l.CAMLQuery")
     public getItemsByCAMLQuery(query: ICamlQuery, ...expands: string[]): Promise<any> {
 
-        const q = this.clone(List, "getitems");
-        return spPost(q.expand(...expands), body({ query: assign(metadata("SP.CamlQuery"), query) }));
+        return spPost(List(this, "getitems").expand(...expands), body({ query }));
     }
 
     /**
      * See: https://msdn.microsoft.com/en-us/library/office/dn292554.aspx
      * @param query An object that defines the change log item query
      */
-    @tag("l.ChangesSinceToken")
     public getListItemChangesSinceToken(query: IChangeLogItemQuery): Promise<string> {
 
-        const o = this.clone(List, "getlistitemchangessincetoken").usingParser({
-            parse(r: Response) {
-                return r.text();
-            },
-        });
-        return spPost(o, body({ "query": assign(metadata("SP.ChangeLogItemQuery"), query) }));
+        return spPost(List(this, "getlistitemchangessincetoken").using(TextParse()), body({ query }));
     }
 
     /**
      * Moves the list to the Recycle Bin and returns the identifier of the new Recycle Bin item.
      */
-    @tag("l.recycle")
     public async recycle(): Promise<string> {
-        const data = await spPost(this.clone(List, "recycle"));
-        return hOP(data, "Recycle") ? data.Recycle : data;
+        return spPost(List(this, "recycle"));
     }
 
     /**
      * Renders list data based on the view xml provided
      * @param viewXml A string object representing a view xml
      */
-    @tag("l.renderListData")
     public async renderListData(viewXml: string): Promise<IRenderListData> {
 
-        const q = this.clone(List, "renderlistdata(@viewXml)");
+        const q = List(this, "renderlistdata(@viewXml)");
         q.query.set("@viewXml", `'${viewXml}'`);
         const data = await spPost(q);
-
-        // data will be a string, so we parse it again
-        return JSON.parse(hOP(data, "RenderListData") ? data.RenderListData : data);
+        return JSON.parse(data);
     }
 
     /**
@@ -260,26 +231,22 @@ export class _List extends _SharePointQueryableInstance<IListInfo> {
      * @param overrideParams The parameters that are used to override and extend the regular SPRenderListDataParameters.
      * @param query Allows setting of query parameters
      */
-    @tag("l.AsStream")
-    public renderListDataAsStream(parameters: IRenderListDataParameters, overrideParams: any = null, query = new Map<string, string>()): Promise<IRenderListDataAsStreamResult> {
+    // eslint-disable-next-line max-len
+    public renderListDataAsStream(parameters: IRenderListDataParameters, overrideParameters: any = null, query = new Map<string, string>()): Promise<IRenderListDataAsStreamResult> {
 
         if (hOP(parameters, "RenderOptions") && isArray(parameters.RenderOptions)) {
-            parameters.RenderOptions = (<RenderListDataOptions[]>parameters.RenderOptions).reduce((v, c) => v + c);
+            parameters.RenderOptions = parameters.RenderOptions.reduce((v, c) => v + c);
         }
 
-        let bodyOptions = { parameters: assign(metadata("SP.RenderListDataParameters"), parameters) };
-
-        if (objectDefinedNotNull(overrideParams)) {
-            bodyOptions = assign(bodyOptions, { overrideParameters: assign(metadata("SP.RenderListDataOverrideParameters"), overrideParams) });
-        }
-
-        const clone = this.clone(List, "RenderListDataAsStream", true, true);
+        const clone = List(this, "RenderListDataAsStream");
 
         if (query && query.size > 0) {
             query.forEach((v, k) => clone.query.set(k, v));
         }
 
-        return spPost(clone, body(bodyOptions));
+        const params = objectDefinedNotNull(overrideParameters) ? { parameters, overrideParameters } : { parameters };
+
+        return spPost(clone, body(params));
     }
 
     /**
@@ -288,35 +255,17 @@ export class _List extends _SharePointQueryableInstance<IListInfo> {
      * @param formId The id of the form
      * @param mode Enum representing the control mode of the form (Display, Edit, New)
      */
-    @tag("l.renderListFormData")
     public async renderListFormData(itemId: number, formId: string, mode: ControlMode): Promise<IListFormData> {
-        const data = await spPost(this.clone(List, `renderlistformdata(itemid=${itemId}, formid='${formId}', mode='${mode}')`));
+        const data = await spPost(List(this, `renderlistformdata(itemid=${itemId}, formid='${formId}', mode='${mode}')`));
         // data will be a string, so we parse it again
-        return JSON.parse(hOP(data, "RenderListFormData") ? data.RenderListFormData : data);
+        return JSON.parse(data);
     }
 
     /**
      * Reserves a list item ID for idempotent list item creation.
      */
-    @tag("l.reserveListItemId")
     public async reserveListItemId(): Promise<number> {
-        const data = await spPost(this.clone(List, "reservelistitemid"));
-        return hOP(data, "ReserveListItemId") ? data.ReserveListItemId : data;
-    }
-
-    /**
-     * Returns the ListItemEntityTypeFullName for this list, used when adding/updating list items. Does not support batching.
-     */
-    @tag("l.getListItemEntityTypeFullName")
-    public getListItemEntityTypeFullName(): Promise<string> {
-
-        // we cache these requests as the entity name doesn't change and we can save traffic
-        // this is justified as this method generates our second highest number of monthly executions ahead of item add and update
-        return this.clone(List, null, false).select("ListItemEntityTypeFullName").usingCaching({
-            expiration: dateAdd(new Date(), "day", 5),
-            key: `PnPjs-ListEntityName:${this.toUrl()}`,
-            storeName: "local",
-        })<{ ListItemEntityTypeFullName: string }>().then(o => o.ListItemEntityTypeFullName);
+        return spPost(List(this, "reservelistitemid"));
     }
 
     /**
@@ -328,7 +277,6 @@ export class _List extends _SharePointQueryableInstance<IListInfo> {
      * @param checkInComment Optional check in comment.
      * @param additionalProps Optional set of additional properties LeafName new document file name,
      */
-    @tag("l.addValidateUpdateItemUsingPath")
     public async addValidateUpdateItemUsingPath(
         formValues: IListItemFormUpdateValue[],
         decodedUrl: string,
@@ -361,14 +309,12 @@ export class _List extends _SharePointQueryableInstance<IListInfo> {
             }
         }
 
-        const res = await spPost(this.clone(List, "AddValidateUpdateItemUsingPath()"), body({
+        return spPost(List(this, "AddValidateUpdateItemUsingPath()"), body({
             bNewDocumentUpdate,
             checkInComment,
             formValues,
-            listItemCreateInfo: assign(metadata("SP.ListItemCreationInformationUsingPath"), addProps),
+            listItemCreateInfo: addProps,
         }));
-
-        return hOP(res, "AddValidateUpdateItemUsingPath") ? res.AddValidateUpdateItemUsingPath : res;
     }
 
     /**
@@ -414,7 +360,7 @@ export const List = spInvokableFactory<IList>(_List);
  */
 export interface IListAddResult {
     list: IList;
-    data: any;
+    data: IListInfo;
 }
 
 /**
@@ -422,7 +368,7 @@ export interface IListAddResult {
  */
 export interface IListUpdateResult {
     list: IList;
-    data: any;
+    data: IListInfo;
 }
 
 /**
@@ -431,7 +377,7 @@ export interface IListUpdateResult {
 export interface IListEnsureResult {
     list: IList;
     created: boolean;
-    data: any;
+    data: IListInfo;
 }
 
 /**
@@ -575,37 +521,171 @@ export enum RenderListDataOptions {
     ListSchema = 4,
     MenuView = 8,
     ListContentType = 16,
+    /**
+     * The returned list will have a FileSystemItemId field on each item if possible.
+     */
     FileSystemItemId = 32,
+    /**
+     * Returns the client form schema to add and edit items.
+     */
     ClientFormSchema = 64,
+    /**
+     * Returns QuickLaunch navigation nodes.
+     */
     QuickLaunch = 128,
+    /**
+     * Returns Spotlight rendering information.
+     */
     Spotlight = 256,
+    /**
+     * Returns Visualization rendering information.
+     */
     Visualization = 512,
+    /**
+     * Returns view XML and other information about the current view.
+     */
     ViewMetadata = 1024,
+    /**
+     * Prevents AutoHyperlink from being run on text fields in this query.
+     */
     DisableAutoHyperlink = 2048,
+    /**
+     * Enables urls pointing to Media TA service, such as .thumbnailUrl, .videoManifestUrl, .pdfConversionUrls.
+     */
     EnableMediaTAUrls = 4096,
+    /**
+     * Return Parant folder information.
+     */
     ParentInfo = 8192,
+    /**
+     * Return Page context info for the current list being rendered.
+     */
     PageContextInfo = 16384,
+    /**
+     * Return client-side component manifest information associated with the list.
+     */
     ClientSideComponentManifest = 32768,
+    /**
+     * Return all content-types available on the list.
+     */
+    ListAvailableContentTypes = 65536,
+    /**
+      * Return the order of items in the new-item menu.
+      */
+    FolderContentTypeOrder = 131072,
+    /**
+     * Return information to initialize Grid for quick edit.
+     */
+    GridInitInfo = 262144,
+    /**
+     * Indicator if the vroom API of the SPItemUrl returned in MediaTAUrlGenerator should use site url as host.
+     */
+    SiteUrlAsMediaTASPItemHost = 524288,
+    /**
+     * Return the files representing mount points in the list.
+     */
+    AddToOneDrive = 1048576,
+    /**
+     * Return SPFX CustomAction.
+     */
+    SPFXCustomActions = 2097152,
+    /**
+     * Do not return non-SPFX CustomAction.
+     */
+    CustomActions = 4194304,
 }
 /**
  * Represents the parameters to be used to render list data as JSON string in the RenderListDataAsStream method of IList.
  */
 export interface IRenderListDataParameters {
+    /**
+     * Gets or sets a value indicating whether to add all fields to the return
+     */
+    AddAllFields?: boolean;
+    /**
+     * Gets or sets a value indicating whether to add all fields in all views and contetnt types to the return
+     */
+    AddAllViewFields?: boolean;
+    /**
+     * Gets or sets a value indicating whether to return regional settings as part of listschema
+     */
+    AddRegionalSettings?: boolean;
+    /**
+     * This parameter indicates if we always return required fields.
+     */
     AddRequiredFields?: boolean;
+    /**
+     * This parameter indicates whether multi value filtering is allowed for taxonomy fields
+     */
     AllowMultipleValueFilterForTaxonomyFields?: boolean;
+    /**
+     * Gets or sets a value indicating whether to audience target the resulting content
+     */
     AudienceTarget?: boolean;
+    /**
+     * Specifies if we return DateTime field in UTC or local time
+     */
     DatesInUtc?: boolean;
-    DeferredRender?: boolean;
+    /**
+     * Specifies if we want to expand the grouping or not
+     */
     ExpandGroups?: boolean;
+    /**
+     * Gets or sets a value indicating whether to expand user field to return jobtitle etc
+     */
+    ExpandUserField?: boolean;
+    /**
+     * Gets or sets a value indicating whether to filter out folders with ProgId="Team.Channel"
+     */
+    FilterOutChannelFoldersInDefaultDocLib?: boolean;
+    /**
+     * Specifies if we only return first group (regardless of view schema) or not
+     */
     FirstGroupOnly?: boolean;
+    /**
+     * Specifies the url to the folder from which to return items
+     */
     FolderServerRelativeUrl?: string;
+    /**
+     * This parameter indicates which fields to try and ReWrite to CDN Urls, The format of this parameter should be a comma seperated list of field names
+     */
     ImageFieldsToTryRewriteToCdnUrls?: string;
     MergeDefaultView?: boolean;
+    /**
+     * Gets or sets a value indicating whether we're in Modern List boot code path, in which we don't need to check modern vs classic
+     */
+    ModernListBoot?: boolean;
+    /**
+     * Specifies if we return always DateTime field original value
+     */
     OriginalDate?: boolean;
+    /**
+     * Specified the override XML to be combined with the View CAML
+     */
     OverrideViewXml?: string;
+    /**
+     * Specifies the paging information
+     */
     Paging?: string;
+    /**
+     * Specifies if we want to replace the grouping or not to deal with GroupBy throttling
+     */
     ReplaceGroup?: boolean;
+    /**
+     * Gets or sets a value indicating whether to add Url fields in JSON format.
+     */
+    RenderURLFieldInJSON?: boolean;
+    /**
+     * Specifies the type of output to return.
+     */
     RenderOptions?: RenderListDataOptions[] | number;
+    /**
+     * Gets or sets a value indicating whether to not filter out Stub files (0 byte files created for upload).
+     */
+    ShowStubFile?: boolean;
+    /**
+     * Specifies the CAML view XML
+     */
     ViewXml?: string;
 }
 

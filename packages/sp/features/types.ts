@@ -1,16 +1,14 @@
-import { body } from "@pnp/odata";
+import { body } from "@pnp/queryable";
 import {
-    _SharePointQueryableInstance,
-    _SharePointQueryableCollection,
+    _SPInstance,
+    _SPCollection,
     spInvokableFactory,
-} from "../sharepointqueryable.js";
+} from "../spqueryable.js";
 import { defaultPath } from "../decorators.js";
 import { spPost } from "../operations.js";
-import { SPBatch } from "../batch.js";
-import { tag } from "../telemetry.js";
 
 @defaultPath("features")
-export class _Features extends _SharePointQueryableCollection<IFeatureInfo[]> {
+export class _Features extends _SPCollection<IFeatureInfo[]> {
 
     /**
      * Adds (activates) the specified feature
@@ -18,18 +16,17 @@ export class _Features extends _SharePointQueryableCollection<IFeatureInfo[]> {
      * @param id The Id of the feature (GUID)
      * @param force If true the feature activation will be forced
      */
-    @tag("fes.add")
-    public async add(id: string, force = false): Promise<IFeatureAddResult> {
+    public async add(featureId: string, force = false): Promise<IFeatureAddResult> {
 
-        const data = await spPost(this.clone(Features, "add"), body({
+        const data = await spPost(Features(this, "add"), body({
             featdefScope: 0,
-            featureId: id,
-            force: force,
+            featureId,
+            force,
         }));
 
         return {
             data: data,
-            feature: this.getById(id),
+            feature: this.getById(featureId),
         };
     }
 
@@ -39,9 +36,7 @@ export class _Features extends _SharePointQueryableCollection<IFeatureInfo[]> {
      * @param id The Id of the feature (GUID)
      */
     public getById(id: string): IFeature {
-        const feature = Feature(this);
-        feature.concat(`('${id}')`);
-        return tag.configure(feature, "fes.getById");
+        return Feature(this).concat(`('${id}')`);
     }
 
     /**
@@ -50,40 +45,19 @@ export class _Features extends _SharePointQueryableCollection<IFeatureInfo[]> {
      * @param id The Id of the feature (GUID)
      * @param force If true the feature deactivation will be forced
      */
-    @tag("fes.remove")
-    public remove(id: string, force = false): Promise<any> {
+    public remove(featureId: string, force = false): Promise<any> {
 
-        return spPost(this.clone(Features, "remove"), body({
-            featureId: id,
-            force: force,
+        return spPost(Features(this, "remove"), body({
+            featureId,
+            force,
         }));
     }
 }
-export interface IFeatures extends _Features {}
+export interface IFeatures extends _Features { }
 export const Features = spInvokableFactory<IFeatures>(_Features);
 
-export class _Feature extends _SharePointQueryableInstance<IFeatureInfo> {
-
-    /**
-     * Removes (deactivates) the feature
-     *
-     * @param force If true the feature deactivation will be forced
-     */
-    @tag("fe.deactivate")
-    public async deactivate(force = false): Promise<any> {
-
-        const removeDependency = this.addBatchDependency();
-
-        const feature = await Feature(this).select("DefinitionId")<{ DefinitionId: string }>();
-
-        const promise = this.getParent<IFeatures>(Features, this.parentUrl, "", <SPBatch>this.batch).remove(feature.DefinitionId, force);
-
-        removeDependency();
-
-        return promise;
-    }
-}
-export interface IFeature extends _Feature {}
+export class _Feature extends _SPInstance<IFeatureInfo> { }
+export interface IFeature extends _Feature { }
 export const Feature = spInvokableFactory<IFeature>(_Feature);
 
 /**

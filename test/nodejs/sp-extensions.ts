@@ -1,84 +1,86 @@
 import { expect } from "chai";
-import { sp } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/folders/web";
 import "@pnp/sp/folders/list";
 import "@pnp/sp/files/web";
 import "@pnp/sp/files/folder";
 import "@pnp/sp/lists/web";
-import { testSettings } from "../main.js";
-import { getRandomString, isFunc } from "@pnp/common";
+import { getRandomString, isFunc } from "@pnp/core";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-// npm run test -- -g 'nodejs - sp-extensions'
-describe("nodejs - sp-extensions", () => {
 
-    if (testSettings.enableWebTests) {
+describe("NodeJS: sp-extensions", function () {
 
-        it("Should allow reading of a stream", async function () {
+    before(function () {
 
-            const content = "Some test text content.";
-            const name = `Testing setContent - ${getRandomString(4)}.txt`;
-            const files = sp.web.defaultDocumentLibrary.rootFolder.files;
-            await files.add(name, content);
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
 
-            const stream = await files.getByName(name).getStream();
+    it("Read Stream", async function () {
 
-            // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-            expect(stream).to.not.be.null;
+        const content = "Some test text content.";
+        const name = `Testing setContent - ${getRandomString(4)}.txt`;
+        const files = this.pnp.sp.web.defaultDocumentLibrary.rootFolder.files;
+        await files.addUsingPath(name, content);
 
-            expect(stream.knownLength).to.be.greaterThan(0);
+        const stream = await files.getByUrl(name).getStream();
 
-            // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-            expect(stream.body).to.not.be.null;
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        expect(stream).to.not.be.null;
 
-            const txt = await new Promise<string>((resolve) => {
-                let data = "";
-                stream.body.on("data", (chunk) => data += chunk);
-                stream.body.on("end", () => resolve(data));
-            });
+        expect(stream.knownLength).to.be.greaterThan(0);
 
-            expect(txt).to.eq(content);
+        // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+        expect(stream.body).to.not.be.null;
+
+        const txt = await new Promise<string>((resolve) => {
+            let data = "";
+            stream.body.on("data", (chunk) => data += chunk);
+            stream.body.on("end", () => resolve(data));
         });
 
-        it("Should allow adding chunks via stream", async function () {
+        expect(txt).to.eq(content);
+    });
 
-            const name = `Testing addChunked (with Nodejs stream) - ${getRandomString(4)}.txt`;
-            const content = "Some test text content.";
+    it("Adding Chunks via Stream", async function () {
 
-            const tmpFilePath = path.join(os.tmpdir(), name);
-            fs.writeFileSync(tmpFilePath, content);
+        const name = `Testing addChunked (with Nodejs stream) - ${getRandomString(4)}.txt`;
+        const content = "Some test text content.";
 
-            const stream = fs.createReadStream(tmpFilePath);
-            const files = sp.web.defaultDocumentLibrary.rootFolder.files;
+        const tmpFilePath = path.join(os.tmpdir(), name);
+        fs.writeFileSync(tmpFilePath, content);
 
-            await files.addChunked(name, stream, null, true, 10);
+        const stream = fs.createReadStream(tmpFilePath);
+        const files = this.pnp.sp.web.defaultDocumentLibrary.rootFolder.files;
 
-            const fileContent = await files.getByName(name).getText();
+        await files.addChunked(name, stream, null, true);
 
-            expect(fileContent.length).be.equal(content.length);
+        const fileContent = await files.getByUrl(name).getText();
 
-            if (isFunc((<any>fs).rmSync)) {
-                (<any>fs).rmSync(tmpFilePath);
-            } else {
-                fs.unlinkSync(tmpFilePath);
-            }
-        });
+        expect(fileContent.length).be.equal(content.length);
 
-        it("Should allow adding chunks non-stream", async function () {
+        if (isFunc((<any>fs).rmSync)) {
+            (<any>fs).rmSync(tmpFilePath);
+        } else {
+            fs.unlinkSync(tmpFilePath);
+        }
+    });
 
-            const name = `Testing addChunked (with Nodejs buffer) - ${getRandomString(4)}.txt`;
-            const content = "Some test text content.";
+    it("Adding Chunks Non-Stream", async function () {
 
-            const files = sp.web.defaultDocumentLibrary.rootFolder.files;
+        const name = `Testing addChunked (with Nodejs buffer) - ${getRandomString(4)}.txt`;
+        const content = "Some test text content.";
 
-            await files.addChunked(name, content as any, null, true, 10);
+        const files = this.pnp.sp.web.defaultDocumentLibrary.rootFolder.files;
 
-            const fileContent = await files.getByName(name).getText();
+        await files.addChunked(name, content as any, null, true, 10);
 
-            expect(fileContent.length).be.equal(content.length);
-        });
-    }
+        const fileContent = await files.getByUrl(name).getText();
+
+        expect(fileContent.length).be.equal(content.length);
+    });
 });

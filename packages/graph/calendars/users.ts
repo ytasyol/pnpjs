@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _User } from "../users/types.js";
 import { Calendar, ICalendar, IEvents, Events, Calendars, ICalendars } from "./types.js";
 import { calendarView, ICalendarViewInfo } from "./funcs.js";
@@ -21,8 +21,8 @@ declare module "../users/types" {
     }
 }
 
-addProp(_User, "calendar", Calendar, "calendar");
-addProp(_User, "calendars", Calendars, "calendars");
+addProp(_User, "calendar", Calendar);
+addProp(_User, "calendars", Calendars);
 addProp(_User, "events", Events);
 
 _User.prototype.calendarView = calendarView;

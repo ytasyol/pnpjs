@@ -1,11 +1,9 @@
-import { _SharePointQueryableInstance, ISharePointQueryable } from "../sharepointqueryable.js";
-import { assign, hOP, getHashCode, objectDefinedNotNull, isArray, IConfigOptions, DefaultRuntime } from "@pnp/common";
-import { metadata } from "../utils/metadata.js";
-import { CachingOptions, body } from "@pnp/odata";
+import { _SPInstance, spInvokableFactory, SPInit } from "../spqueryable.js";
+import { getHashCode, hOP, isArray } from "@pnp/core";
+import { body, CacheAlways, CacheKey, invokable } from "@pnp/queryable";
 import { ISearchQuery, ISearchResponse, ISearchResult, ISearchBuilder, SearchQueryInit } from "./types.js";
 import { spPost } from "../operations.js";
 import { defaultPath } from "../decorators.js";
-import { tag } from "../telemetry.js";
 
 const funcs = new Map<string, string>([
     ["text", "Querytext"],
@@ -58,8 +56,7 @@ export function SearchQueryBuilder(queryText = "", _query = {}): ISearchBuilder 
         query: Object.assign({
             Querytext: queryText,
         }, _query),
-    },
-    {
+    }, {
         get(self, propertyKey, proxy) {
 
             const pk = propertyKey.toString();
@@ -82,60 +79,42 @@ export function SearchQueryBuilder(queryText = "", _query = {}): ISearchBuilder 
     });
 }
 
-const queryRegex = /_api\/search\/postquery$/i;
-
 /**
  * Describes the search API
  *
  */
 @defaultPath("_api/search/postquery")
-export class _Search extends _SharePointQueryableInstance {
+@invokable(function (this: _Search, init) {
+    return this.run(<SearchQueryInit>init);
+})
+export class _Search extends _SPInstance {
 
     /**
      * @returns Promise
      */
-    @tag("se.execute")
-    public async execute(queryInit: SearchQueryInit): Promise<SearchResults> {
+    public async run(queryInit: SearchQueryInit): Promise<SearchResults> {
 
         const query = this.parseQuery(queryInit);
 
-        const postBody = body({
-            request: assign(
-                metadata("Microsoft.Office.Server.Search.REST.SearchRequest"),
-                Object.assign(
-                    {},
-                    query,
-                    {
-                        HitHighlightedProperties: this.fixArrProp(query.HitHighlightedProperties),
-                        Properties: this.fixArrProp(query.Properties),
-                        RefinementFilters: this.fixArrProp(query.RefinementFilters),
-                        ReorderingRules: this.fixArrProp(query.ReorderingRules),
-                        SelectProperties: this.fixArrProp(query.SelectProperties),
-                        SortList: this.fixArrProp(query.SortList),
-                    })),
+        const postBody: RequestInit = body({
+            request: {
+                ...query,
+                HitHighlightedProperties: this.fixArrProp(query.HitHighlightedProperties),
+                Properties: this.fixArrProp(query.Properties),
+                RefinementFilters: this.fixArrProp(query.RefinementFilters),
+                ReorderingRules: this.fixArrProp(query.ReorderingRules),
+                SelectProperties: this.fixArrProp(query.SelectProperties),
+                SortList: this.fixArrProp(query.SortList),
+            },
         });
 
-        // if we are using caching with this search request, then we need to handle some work upfront to enable that
-        if (this.data.useCaching) {
+        const poster = new _Search([this, this.parentUrl]);
+        poster.using(CacheAlways(), CacheKey(getHashCode(JSON.stringify(postBody)).toString()));
 
-            // force use of the cache for this request if .usingCaching was called
-            this._forceCaching = true;
+        const data = await spPost(poster, postBody);
 
-            // because all the requests use the same url they would collide in the cache we use a special key
-            const cacheKey = `PnPjs.SearchWithCaching(${getHashCode(postBody.body)})`;
-
-            if (objectDefinedNotNull(this.data.cachingOptions)) {
-                // if our key ends in the postquery url we overwrite it
-                if (queryRegex.test(this.data.cachingOptions.key)) {
-                    this.data.cachingOptions.key = cacheKey;
-                }
-            } else {
-                this.data.cachingOptions = new CachingOptions(cacheKey);
-            }
-        }
-
-        const data = await spPost(this, postBody);
-        return new SearchResults(data, this.toUrl(), query);
+        // Create search instance copy for SearchResult's getPage request.
+        return new SearchResults(data, new _Search([this, this.parentUrl]), query);
     }
 
     /**
@@ -143,12 +122,8 @@ export class _Search extends _SharePointQueryableInstance {
      *
      * @param prop property to fix for container struct
      */
-    private fixArrProp(prop: any): { results: any[] } {
-        if (typeof prop === "undefined") {
-            return ({ results: [] });
-        }
-
-        return { results: isArray(prop) ? prop : [prop] };
+    private fixArrProp<T>(prop: T | T[]): T[] {
+        return typeof prop === "undefined" ? [] : isArray(prop) ? prop : [prop];
     }
 
     /**
@@ -172,23 +147,19 @@ export class _Search extends _SharePointQueryableInstance {
     }
 }
 
-export interface ISearch {
-    (queryInit: SearchQueryInit): Promise<SearchResults>;
+export interface ISearch extends Pick<_Search, "run" | "using"> {
+    (init: SearchQueryInit): Promise<SearchResults>;
 }
-
-export const Search = (baseUrl: string | ISharePointQueryable, options: IConfigOptions = {}, runtime = DefaultRuntime): ISearch => (queryInit: SearchQueryInit) => {
-    return (new _Search(baseUrl)).configure(options).setRuntime(runtime).execute(queryInit);
-};
+export const Search: (base: SPInit, path?: string) => ISearch = <any>spInvokableFactory(_Search);
 
 export class SearchResults {
 
     constructor(rawResponse: any,
-        private _url: string,
+        private _search: _Search,
         private _query: ISearchQuery,
         private _raw: ISearchResponse = null,
         private _primary: ISearchResult[] = null) {
 
-        this._url = this._url.replace(queryRegex, "");
         this._raw = rawResponse.postquery ? rawResponse.postquery : rawResponse;
     }
 
@@ -236,17 +207,18 @@ export class SearchResults {
         // otherwise get the previous RowLimit or default to 10
         const rows = pageSize !== undefined ? pageSize : hOP(this._query, "RowLimit") ? this._query.RowLimit : 10;
 
-        const query: ISearchQuery = assign(this._query, {
+        const query: ISearchQuery = {
+            ...this._query,
             RowLimit: rows,
             StartRow: rows * (pageNumber - 1),
-        });
+        };
 
         // we have reached the end
         if (query.StartRow > this.TotalRows) {
             return Promise.resolve(null);
         }
 
-        return Search(this._url)(query);
+        return this._search.run(query);
     }
 
     /**
@@ -270,13 +242,7 @@ export class SearchResults {
 
             results.push(cells.reduce((res, cell) => {
 
-                Reflect.defineProperty(res, cell.Key,
-                    {
-                        configurable: false,
-                        enumerable: true,
-                        value: cell.Value,
-                        writable: false,
-                    });
+                res[cell.Key] = cell.Value;
 
                 return res;
 

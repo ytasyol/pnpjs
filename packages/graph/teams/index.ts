@@ -1,11 +1,11 @@
-import { addProp, body } from "@pnp/odata";
-import { GraphRest } from "../rest";
-import { _Group, Group } from "../groups/types";
-import { ITeamCreateResult, ITeam, Team, ITeams, Teams } from "./types";
+import { addProp, body } from "@pnp/queryable";
+import { GraphFI } from "../fi.js";
+import { _Group, Group } from "../groups/types.js";
+import { ITeamCreateResult, ITeam, Team, ITeams, Teams } from "./types.js";
 import { Team as ITeamType } from "@microsoft/microsoft-graph-types";
-import { graphPut } from "../operations";
+import { graphPut } from "../operations.js";
 
-import "./users";
+import "./users.js";
 
 export {
     Channel,
@@ -45,7 +45,7 @@ addProp(_Group, "team", Team);
 
 _Group.prototype.createTeam = async function (this: _Group, props: ITeamType): Promise<ITeamCreateResult> {
 
-    const data = await graphPut(this.clone(Group, "team"), body(props));
+    const data = await graphPut(Group(this, "team"), body(props));
 
     return {
         data,
@@ -53,18 +53,16 @@ _Group.prototype.createTeam = async function (this: _Group, props: ITeamType): P
     };
 };
 
-declare module "../rest" {
-    interface GraphRest {
+declare module "../fi" {
+    interface GraphFI {
         readonly teams: ITeams;
     }
 }
 
-Reflect.defineProperty(GraphRest.prototype, "teams", {
+Reflect.defineProperty(GraphFI.prototype, "teams", {
     configurable: true,
     enumerable: true,
-    get: function (this: GraphRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return Teams(baseUrl).configure(options).setRuntime(runtime);
-        });
+    get: function (this: GraphFI) {
+        return this.create(Teams);
     },
 });

@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Web } from "../webs/types.js";
 import { Fields, IFields } from "./types.js";
 
@@ -20,4 +20,4 @@ declare module "../webs/types" {
 }
 
 addProp(_Web, "fields", Fields);
-addProp(_Web, "availablefields", Fields, "availablefields");
+addProp(_Web, "availablefields", Fields);

@@ -1,64 +1,76 @@
-import { getRandomString } from "@pnp/common";
+import { getRandomString, delay, stringIsNullOrEmpty } from "@pnp/core";
 import { expect } from "chai";
-import { testSettings } from "../main";
-import { graph } from "@pnp/graph";
 import "@pnp/graph/teams";
 import "@pnp/graph/groups";
+import getValidUser from "./utilities/getValidUser.js";
 
-// TODO:: skipping until we enable the test user settings
+// skipping because this is a very time intensive test for an API that is unlikely to change frequently
 describe.skip("Teams", function () {
 
-    if (testSettings.enableWebTests) {
-        let teamID = "";
-        let operationID = "";
+    let testUserId = "";
+    let teamBody = {};
+    let teamID = "";
+    let operationID = "";
 
-        const sleep = (ms): Promise<void> => {
-            return new Promise((resolve) => {
-                setTimeout(resolve, ms);
-            });
-        };
+    before(async function () {
 
-        // tslint:disable:object-literal-sort-keys
-        const teamBody = {
+        if (!this.pnp.settings.enableWebTests || stringIsNullOrEmpty(this.pnp.settings.testUser)) {
+            this.skip();
+        }
+
+        const userInfo = await getValidUser.call(this);
+        testUserId = userInfo.id;
+        teamBody = {
             "template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates('standard')",
-            "displayName": "",
+            "displayName": "PnPJS Test Team",
             "description": "PnPJS Test Team’s Description",
             "members": [
                 {
                     "@odata.type": "#microsoft.graph.aadUserConversationMember",
                     "roles": ["owner"],
-                    "user@odata.bind": "https://graph.microsoft.com/v1.0/users('1d7f876a-49c2-4b05-8ca4-cb819ae840c4')",
+                    "user@odata.bind": `https://graph.microsoft.com/v1.0/users('${testUserId}')`,
                 },
             ],
         };
+    });
 
-        beforeEach(async function () {
-            // Clear out groupID
-            teamID = "";
-            operationID = "";
-        });
 
-        it("createTeam()", async function () {
-            const teamName = `TestTeam_${getRandomString(4)}`;
-            teamBody.displayName = teamName;
-            const teamCreateResult = await graph.teams.create(teamBody);
-            teamID = teamCreateResult.teamId;
-            operationID = teamCreateResult.operationId;
-            return expect(teamID.length > 0).is.true;
-        });
+    beforeEach(async function () {
+        // Clear out groupID
+        teamID = "";
+        operationID = "";
+    });
 
-        afterEach(async function () {
-            if (teamID !== "") {
+    it("create()", async function () {
+        const teamName = `TestTeam_${getRandomString(4)}`;
+        (<any>teamBody).displayName = teamName;
+        const teamCreateResult = await this.pnp.graph.teams.create(teamBody);
+        teamID = teamCreateResult.teamId;
+        operationID = teamCreateResult.operationId;
+        return expect(teamID.length > 0).is.true && expect(operationID.length > 0).is.true;
+    });
+
+    after(async function () {
+
+        // Added delays to try and deal with async nature of adding a team. At this time it seems to be enough.
+        if (teamID !== "" && operationID !== "") {
+
+            try {
+
+                await delay(6000);
+
                 let isPending = true;
                 while (isPending) {
-                    const status = await graph.teams.getById(teamID).getOperationById(operationID);
+                    const status = await this.pnp.graph.teams.getById(teamID).getOperationById(operationID);
                     isPending = (status.status === "inProgress");
                     if (isPending) {
-                        await sleep(3000);
+                        await delay(3000);
                     }
                 }
-                await graph.groups.getById(teamID).delete();
-            }
-        });
-    }
+                await this.pnp.graph.groups.getById(teamID).delete();
+
+                // eslint-disable-next-line no-empty
+            } catch (e) { }
+        }
+    });
 });

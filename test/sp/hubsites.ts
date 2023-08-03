@@ -1,34 +1,41 @@
-import { sp } from "@pnp/sp";
-import { testSettings } from "../main.js";
 import { expect } from "chai";
+import "@pnp/sp/sites";
 import "@pnp/sp/hubsites";
+import { spfi } from "@pnp/sp";
 
 describe("Hubsites", function () {
 
-    if (testSettings.enableWebTests) {
+    let hubSiteId: string;
 
-        let hubSiteId: string;
+    before(async function () {
 
-        before(async function () {
-            await sp.site.registerHubSite();
-            const r = await sp.site.select("Id")();
-            hubSiteId = r.Id;
-        });
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
 
-        it(".getById", function () {
-            return expect(sp.hubSites.getById(hubSiteId)()).to.eventually.be.fulfilled;
-        });
+        const rootSite = spfi([this.pnp.sp.site, this.pnp.settings.sp.url]);
 
-        it(".getSite", async function () {
+        await rootSite.site.registerHubSite();
+        const r = await rootSite.site.select("Id")();
+        hubSiteId = r.Id;
+    });
 
-            const hs = await sp.hubSites.getById(hubSiteId).getSite();
+    it("getById", function () {
+        return expect(this.pnp.sp.hubSites.getById(hubSiteId)()).to.eventually.be.fulfilled;
+    });
 
-            return expect(hs.select("Title")()).to.eventually.be.fulfilled;
-        });
+    it("getSite", async function () {
 
-        // unregister the test site, so that tests will run successfully next time as well
-        after(async function () {
-            await sp.site.unRegisterHubSite();
-        });
-    }
+        const hs = await this.pnp.sp.hubSites.getById(hubSiteId).getSite();
+
+        return expect(hs.select("Title")()).to.eventually.be.fulfilled;
+    });
+
+    // unregister the test site, so that tests will run successfully next time as well
+    after(async function () {
+        if (this.pnp.settings.enableWebTests) {
+            return this.pnp.sp.site.unRegisterHubSite();
+        }
+        return;
+    });
 });

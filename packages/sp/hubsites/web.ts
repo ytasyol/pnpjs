@@ -26,7 +26,7 @@ declare module "../webs/types" {
 }
 
 _Web.prototype.hubSiteData = async function (this: _Web, forceRefresh = false): Promise<IHubSiteWebData> {
-    const data = await this.clone(Web, `hubSiteData(${forceRefresh})`)<IHubSiteWebData>();
+    const data = await Web(this, `hubSiteData(${forceRefresh})`)<IHubSiteWebData>();
     if (typeof data === "string") {
         return JSON.parse(data);
     }
@@ -34,5 +34,5 @@ _Web.prototype.hubSiteData = async function (this: _Web, forceRefresh = false): 
 };
 
 _Web.prototype.syncHubSiteTheme = function (this: _Web): Promise<void> {
-    return spPost(this.clone(Web, "syncHubSiteTheme"));
+    return spPost(Web(this, "syncHubSiteTheme"));
 };

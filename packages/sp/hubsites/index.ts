@@ -1,4 +1,4 @@
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { HubSites, IHubSites } from "./types.js";
 
 import "./site.js";
@@ -13,8 +13,8 @@ export {
     IHubSites,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
         /**
          * Lists all of the subsites
          */
@@ -22,12 +22,10 @@ declare module "../rest" {
     }
 }
 
-Reflect.defineProperty(SPRest.prototype, "hubSites", {
+Reflect.defineProperty(SPFI.prototype, "hubSites", {
     configurable: true,
     enumerable: true,
-    get: function (this: SPRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return HubSites(baseUrl).configure(options).setRuntime(runtime);
-        });
+    get: function (this: SPFI) {
+        return this.create(HubSites);
     },
 });

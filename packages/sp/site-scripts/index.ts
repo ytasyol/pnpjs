@@ -1,6 +1,6 @@
 import "./web.js";
 import "./list.js";
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { ISiteScripts, SiteScripts } from "./types.js";
 
 export {
@@ -12,18 +12,16 @@ export {
     ISiteScriptSerializationResult,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
         readonly siteScripts: ISiteScripts;
     }
 }
 
-Reflect.defineProperty(SPRest.prototype, "siteScripts", {
+Reflect.defineProperty(SPFI.prototype, "siteScripts", {
     configurable: true,
     enumerable: true,
-    get: function (this: SPRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return SiteScripts(baseUrl).configure(options).setRuntime(runtime);
-        });
+    get: function (this: SPFI) {
+        return this.create(SiteScripts);
     },
 });

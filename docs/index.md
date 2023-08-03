@@ -2,43 +2,38 @@
 
 PnPjs is a collection of fluent libraries for consuming SharePoint, Graph, and Office 365 REST APIs in a type-safe way. You can use it within SharePoint Framework, Nodejs, or any JavaScript project. This an open source initiative and we encourage contributions and constructive feedback from the community.
 
+These articles provide general guidance for working with the libraries. If you are migrating from V2 please review the [transition guide](transition-guide.md).
+
+* **[Getting Started](getting-started.md)**
+* [Authentication](concepts/authentication.md)
+* [Get Started Contributing](contributing/index.md)
+
 ![Fluent API in action](img/PnPJS_FluentAPI.gif)
 
 _Animation of the library in use, note intellisense help in building your queries_
-
-## General Guidance
-
-These articles provide general guidance for working with the libraries. If you are migrating from v1 please review the [transition guide](transition-guide.md).
-
-* **[Getting Started](getting-started.md)**
-* [Authentication](./authentication/index.md)
-* [Get Started Contributing](./contributing/index.md)
-* [npm scripts](npm-scripts.md)
-* [Polyfills](concepts/polyfill.md)
 
 ## Packages
 
 Patterns and Practices client side libraries (PnPjs) are comprised of the packages listed below. All of the packages are published as a set and depend on their peers within the @pnp scope.
 
-The latest published version is [![npm version](https://badge.fury.io/js/%40pnp%2Fcommon.svg)](https://badge.fury.io/js/%40pnp%2Fcommon).
+The latest published version is [![npm version](https://badge.fury.io/js/%40pnp%2Fcore.svg)](https://badge.fury.io/js/%40pnp%2Fcore).
 
 |     ||  |
 | ---| -------------|-------------|
 | @pnp/| | |
-|| [adaljsclient](./authentication/adaljsclient.md)  | Provides an adaljs wrapper suitable for use with PnPjs |
-|| [common](./common/index.md)  | Provides shared functionality across all pnp libraries |
-|| [config-store](./config-store/index.md) | Provides a way to manage configuration within your application |
-|| [graph](./graph/index.md) | Provides a fluent api for working with Microsoft Graph |
-|| [logging](./logging/index.md) | Light-weight, subscribable logging framework |
-|| [msaljsclient](./authentication/msaljsclient.md)  | Provides an msal wrapper suitable for use with PnPjs |
-|| [nodejs](./nodejs/index.md) | Provides functionality enabling the @pnp libraries within nodejs |
-|| [odata](./odata/index.md) | Provides shared odata functionality and base classes |
-|| [sp](./sp/index.md) | Provides a fluent api for working with SharePoint REST |
-|| [sp-addinhelpers](./sp-addinhelpers/index.md) | Provides functionality for working within SharePoint add-ins |
+|| [azidjsclient](./concepts/auth-nodejs)  | Provides an Azure Identity wrapper suitable for use with PnPjs |
+|| [core](./packages#core)  | Provides shared functionality across all pnp libraries |
+|| [graph](./packages#graph) | Provides a fluent api for working with Microsoft Graph |
+|| [logging](./packages#logging) | Light-weight, subscribable logging framework |
+|| [msaljsclient](./concepts/authentication)  | Provides an msal wrapper suitable for use with PnPjs |
+|| [nodejs](./packages#nodejs) | Provides functionality enabling the @pnp libraries within nodejs |
+|| [queryable](./packages#queryable) | Provides shared query functionality and base classes |
+|| [sp](./packages#sp) | Provides a fluent api for working with SharePoint REST |
+|| [sp-admin](./packages#sp-admin) | Provides a fluent api for working with M365 Tenant admin methods |
 
 ## Authentication
 
-We have a new section dedicated to helping you [figure out the best way to handle authentication](./authentication/index.md) in your application, check it out!
+We have a new section dedicated to helping you [figure out the best way to handle authentication](concepts/authentication.md) in your application, check it out!
 
 ## Issues, Questions, Ideas
 
@@ -54,8 +49,8 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 ### "Sharing is Caring"
 
-Please use [http://aka.ms/sppnp](http://aka.ms/sppnp) for the latest updates around the whole *SharePoint Patterns and Practices (PnP) program*.
+Please use [http://aka.ms/community/home](http://aka.ms/community/home) for the latest updates around the whole *Microsoft 365 and Power Platform Community(PnP)* initiative.
 
 ### Disclaimer
 
-**THIS CODE IS PROVIDED *AS IS* WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.**
+**THIS CODE IS PROVIDED _AS IS_ WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, INCLUDING ANY IMPLIED WARRANTIES OF FITNESS FOR A PARTICULAR PURPOSE, MERCHANTABILITY, OR NON-INFRINGEMENT.**

@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _List } from "../lists/types.js";
 import { Views, IViews, IView, View } from "./types.js";
 
@@ -26,7 +26,7 @@ declare module "../lists/types" {
 }
 
 addProp(_List, "views", Views);
-addProp(_List, "defaultView", View, "DefaultView");
+addProp(_List, "defaultView", View);
 
 _List.prototype.getView = function (this: _List, viewId: string): IView {
     return View(this, `getView('${viewId}')`);

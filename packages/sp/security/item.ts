@@ -1,7 +1,7 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Item } from "../items/types.js";
 import { RoleAssignments, ISecurableMethods } from "./types.js";
-import { SharePointQueryableInstance } from "../sharepointqueryable.js";
+import { SPInstance } from "../spqueryable.js";
 import {
     getUserEffectivePermissions,
     getCurrentUserEffectivePermissions,
@@ -18,7 +18,7 @@ declare module "../items/types" {
 }
 
 addProp(_Item, "roleAssignments", RoleAssignments);
-addProp(_Item, "firstUniqueAncestorSecurableObject", SharePointQueryableInstance);
+addProp(_Item, "firstUniqueAncestorSecurableObject", SPInstance);
 
 _Item.prototype.getUserEffectivePermissions = getUserEffectivePermissions;
 _Item.prototype.getCurrentUserEffectivePermissions = getCurrentUserEffectivePermissions;

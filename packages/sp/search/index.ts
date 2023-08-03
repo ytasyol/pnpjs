@@ -1,9 +1,7 @@
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { SearchQueryInit } from "./types.js";
-import { _Search } from "./query.js";
-import { ICachingOptions } from "@pnp/odata";
-import { SearchResults, Search } from "./query.js";
-import { ISuggestQuery, ISuggestResult, Suggest } from "./suggest.js";
+import { SearchResults, _Search } from "./query.js";
+import { ISuggestQuery, ISuggestResult, _Suggest } from "./suggest.js";
 
 export * from "./types.js";
 
@@ -22,21 +20,14 @@ export {
     Suggest,
 } from "./suggest.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
         /**
          * Conduct a search
          *
          * @param query Parameters for the search
          */
         search(query: SearchQueryInit): Promise<SearchResults>;
-        /**
-         * Conduct a search with caching enabled
-         *
-         * @param query Parameters for the search
-         * @param options Optional, caching options
-         */
-        searchWithCaching(query: SearchQueryInit, options?: ICachingOptions): Promise<SearchResults>;
         /**
          * Conduct a suggest search query
          *
@@ -46,23 +37,12 @@ declare module "../rest" {
     }
 }
 
-SPRest.prototype.search = function (this: SPRest, query: SearchQueryInit): Promise<SearchResults> {
+SPFI.prototype.search = function (this: SPFI, query: SearchQueryInit): Promise<SearchResults> {
 
-    return this.childConfigHook(({ options, baseUrl, runtime }) => {
-        return Search(baseUrl, options, runtime)(query);
-    });
+    return (new _Search(this._root)).run(query);
 };
 
-SPRest.prototype.searchWithCaching = function (this: SPRest, query: SearchQueryInit, cacheOptions?: ICachingOptions): Promise<SearchResults> {
+SPFI.prototype.searchSuggest = function (this: SPFI, query: string | ISuggestQuery): Promise<ISuggestResult> {
 
-    return this.childConfigHook(({ options, baseUrl, runtime }) => {
-        return (new _Search(baseUrl)).configure(options).setRuntime(runtime).usingCaching(cacheOptions).execute(query);
-    });
-};
-
-SPRest.prototype.searchSuggest = function (this: SPRest, query: string | ISuggestQuery): Promise<ISuggestResult> {
-
-    return this.childConfigHook(({ options, baseUrl, runtime }) => {
-        return Suggest(baseUrl, options, runtime)(typeof query === "string" ? { querytext: query } : query);
-    });
+    return (new _Suggest(this._root)).run(typeof query === "string" ? { querytext: query } : query);
 };

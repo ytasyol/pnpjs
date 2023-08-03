@@ -1,5 +1,5 @@
 import { Message as IMessageType, MailFolder as IMailFolderType, MailboxSettings as IMailboxSettingsType } from "@microsoft/microsoft-graph-types";
-import { _GraphQueryableCollection, _GraphQueryableInstance, graphInvokableFactory } from "../graphqueryable.js";
+import { _GraphQueryableInstance, _GraphQueryableCollection, graphInvokableFactory } from "../graphqueryable.js";
 import { defaultPath, getById, addable, IGetById, IAddable, updateable, IUpdateable } from "../decorators.js";
 
 /**

@@ -1,26 +1,23 @@
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { IUtilities, Utilities } from "./types.js";
 
 export {
-    ICreateWikiPageResult,
     IEmailProperties,
     IUtilities,
     IWikiPageCreationInfo,
     Utilities,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
         readonly utility: IUtilities;
     }
 }
 
-Reflect.defineProperty(SPRest.prototype, "utility", {
+Reflect.defineProperty(SPFI.prototype, "utility", {
     configurable: true,
     enumerable: true,
-    get: function (this: SPRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return Utilities(baseUrl, "").configure(options).setRuntime(runtime);
-        });
+    get: function (this: SPFI) {
+        return this.create(<any>Utilities, "");
     },
 });

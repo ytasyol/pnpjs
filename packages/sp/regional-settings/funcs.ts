@@ -1,9 +1,10 @@
-import { _SharePointQueryable, SharePointQueryable } from "../sharepointqueryable.js";
+import { _SPQueryable, SPQueryable } from "../spqueryable.js";
 import { spPost } from "../operations.js";
-import { body } from "@pnp/odata";
+import { body } from "@pnp/queryable";
 
-export function getValueForUICultureBinder(propName: string): (this: _SharePointQueryable, cultureName: string) => Promise<string> {
-    return function (this: _SharePointQueryable, cultureName: string): Promise<string> {
-        return spPost(this.clone(SharePointQueryable, `${propName}/getValueForUICulture`), body({ cultureName }));
+export function getValueForUICultureBinder(propName: string): (this: _SPQueryable, cultureName: string) => Promise<string> {
+
+    return function (this: _SPQueryable, cultureName: string): Promise<string> {
+        return spPost(SPQueryable(this, `${propName}/getValueForUICulture`), body({ cultureName }));
     };
 }

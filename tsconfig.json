@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
-        "target": "ES5",
-        "module": "commonjs",
+        "target": "ES2019",
+        "module": "esnext",
         "composite": true,
         "declaration": true,
         "declarationMap": true,
@@ -10,7 +10,7 @@
         "lib": [
             "ES2015",
             "dom",
-            "ES2017.Object"
+            "ES2017.Object",
         ],
         "baseUrl": ".",
         "rootDir": ".",
@@ -25,7 +25,6 @@
         "noFallthroughCasesInSwitch": true,
         "sourceMap": true,
         "skipDefaultLibCheck": true,
-        "downlevelIteration": true,
         "skipLibCheck": true,
         "strictNullChecks": false,
         "preserveConstEnums": true,

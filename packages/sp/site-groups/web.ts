@@ -1,8 +1,7 @@
-import { addProp } from "@pnp/odata";
-import { _Web, Web } from "../webs/types.js";
-import { ISiteGroups, SiteGroups, ISiteGroup, SiteGroup } from "./types.js";
+import { addProp } from "@pnp/queryable";
 import { spPost } from "../operations.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
+import { Web, _Web } from "../webs/types.js";
+import { ISiteGroups, SiteGroups, ISiteGroup, SiteGroup } from "./types.js";
 import "../security/web.js";
 
 declare module "../webs/types" {
@@ -51,9 +50,9 @@ declare module "../webs/types" {
 }
 
 addProp(_Web, "siteGroups", SiteGroups);
-addProp(_Web, "associatedOwnerGroup", SiteGroup, "associatedownergroup");
-addProp(_Web, "associatedMemberGroup", SiteGroup, "associatedmembergroup");
-addProp(_Web, "associatedVisitorGroup", SiteGroup, "associatedvisitorgroup");
+addProp(_Web, "associatedOwnerGroup", SiteGroup);
+addProp(_Web, "associatedMemberGroup", SiteGroup);
+addProp(_Web, "associatedVisitorGroup", SiteGroup);
 
 _Web.prototype.createDefaultAssociatedGroups = async function (
     this: _Web,
@@ -65,10 +64,10 @@ _Web.prototype.createDefaultAssociatedGroups = async function (
 
     await this.breakRoleInheritance(copyRoleAssignments, clearSubscopes);
 
-    const q = this.clone(Web, "createDefaultAssociatedGroups(userLogin=@u,userLogin2=@v,groupNameSeed=@s)");
-    q.query.set("@u", `'${escapeQueryStrValue(siteOwner || "")}'`);
-    q.query.set("@v", `'${escapeQueryStrValue(siteOwner2 || "")}'`);
-    q.query.set("@s", `'${escapeQueryStrValue(groupNameSeed || "")}'`);
+    const q = Web(this, "createDefaultAssociatedGroups(userLogin=@u,userLogin2=@v,groupNameSeed=@s)");
+    q.query.set("@u", `'${siteOwner || ""}'`);
+    q.query.set("@v", `'${siteOwner2 || ""}'`);
+    q.query.set("@s", `'${groupNameSeed || ""}'`);
     return spPost(q);
 };
 

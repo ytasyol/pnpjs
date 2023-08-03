@@ -1,16 +1,16 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Web, Web } from "../webs/types.js";
 import { Lists, ILists, IList, List } from "./types.js";
-import { odataUrlFrom } from "../odata.js";
-import { ISharePointQueryableCollection, SharePointQueryableCollection } from "../sharepointqueryable.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
+import { ISPCollection, SPCollection } from "../spqueryable.js";
+import { encodePath } from "../utils/encode-path-str.js";
 
 declare module "../webs/types" {
     interface _Web {
         readonly lists: ILists;
         readonly siteUserInfoList: IList;
         readonly defaultDocumentLibrary: IList;
-        readonly customListTemplates: ISharePointQueryableCollection;
+        readonly customListTemplates: ISPCollection;
         getList(listRelativeUrl: string): IList;
         getCatalog(type: number): Promise<IList>;
     }
@@ -34,7 +34,7 @@ declare module "../webs/types" {
         /**
          * Gets the collection of all list definitions and list templates that are available
          */
-        readonly customListTemplates: ISharePointQueryableCollection;
+        readonly customListTemplates: ISPCollection;
 
         /**
          * Gets a list by server relative url (list's root folder)
@@ -54,15 +54,15 @@ declare module "../webs/types" {
 }
 
 addProp(_Web, "lists", Lists);
-addProp(_Web, "siteUserInfoList", List, "siteuserinfolist");
-addProp(_Web, "defaultDocumentLibrary", List, "DefaultDocumentLibrary");
-addProp(_Web, "customListTemplates", SharePointQueryableCollection, "getcustomlisttemplates");
+addProp(_Web, "siteUserInfoList", List);
+addProp(_Web, "defaultDocumentLibrary", List);
+addProp(_Web, "customListTemplates", SPCollection, "getcustomlisttemplates");
 
 _Web.prototype.getList = function (this: _Web, listRelativeUrl: string): IList {
-    return List(this, `getList('${escapeQueryStrValue(listRelativeUrl)}')`);
+    return List(this, `getList('${encodePath(listRelativeUrl)}')`);
 };
 
 _Web.prototype.getCatalog = async function (this: _Web, type: number): Promise<IList> {
-    const data = await this.clone(Web, `getcatalog(${type})`).select("Id").get();
-    return List(odataUrlFrom(data));
+    const data = await Web(this, `getcatalog(${type})`).select("Id")();
+    return List([this, odataUrlFrom(data)]);
 };

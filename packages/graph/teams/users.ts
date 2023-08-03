@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _User } from "../users/types.js";
 import { ITeams, Teams } from "./types.js";
 
@@ -11,4 +11,4 @@ declare module "../users/types" {
     }
 }
 
-addProp(_User, "joinedTeams", Teams, "joinedTeams");
+addProp(_User, "joinedTeams", Teams);

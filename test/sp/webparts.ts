@@ -1,50 +1,38 @@
 import { expect } from "chai";
 import "@pnp/sp/webs";
-import { testSettings } from "../main.js";
-import { Web } from "@pnp/sp/webs";
-import { sp } from "@pnp/sp";
-import { WebPartsPersonalizationScope, ILimitedWebPartManager } from "@pnp/sp/presets/all";
-import { getRandomString, combine } from "@pnp/common";
+import { combine, getRandomString } from "@pnp/core";
+import { ILimitedWebPartManager, WebPartsPersonalizationScope } from "@pnp/sp/presets/all";
 
-describe("webparts", function () {
-    if (testSettings.enableWebTests) {
-        it("ensureLimitedWebPartManager-ScopeShared", async function () {
-            const lwm = Web(testSettings.sp.webUrl).folders.getByName("SitePages").files.getByName("Home.aspx").getLimitedWebPartManager(WebPartsPersonalizationScope.Shared);
-            const scope = await lwm.scope();
+describe("WebParts", function () {
 
-            return expect(scope).to.be.equal(1);
-        });
+    before(function () {
 
-        it("ensureLimitedWebPartManager-ScopeUser", async function () {
-            const lwm = Web(testSettings.sp.webUrl).folders.getByName("SitePages").files.getByName("Home.aspx").getLimitedWebPartManager(WebPartsPersonalizationScope.User);
-            const scope = await lwm.scope();
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
 
-            return expect(scope).to.be.equal(0);
-        });
+    it("ensureLimitedWebPartManager-ScopeShared", async function () {
+        const lwm = this.pnp.sp.web.folders.getByUrl("SitePages").files.getByUrl("Home.aspx").getLimitedWebPartManager(WebPartsPersonalizationScope.Shared);
+        const scope = await lwm.scope();
 
-        it("webpartDefinitions", async function () {
-            const currentWeb = await Web(testSettings.sp.webUrl).select("ServerRelativeUrl").get();
-            const wikiPageName = `Test_WikiPage_${getRandomString(5)}.aspx`;
-            const newWikiPageAddress = combine("/", currentWeb.ServerRelativeUrl, "/SitePages/", wikiPageName);
+        return expect(scope).to.be.equal(1);
+    });
 
-            const newPage = await sp.utility.createWikiPage({
-                ServerRelativeUrl: newWikiPageAddress,
-                WikiHtmlContent: "This is my <b>page</b> content. It supports rich html.",
-            });
+    it("ensureLimitedWebPartManager-ScopeUser", async function () {
+        const lwm = this.pnp.sp.web.folders.getByUrl("SitePages").files.getByUrl("Home.aspx").getLimitedWebPartManager(WebPartsPersonalizationScope.User);
+        const scope = await lwm.scope();
 
-            const lwm: ILimitedWebPartManager = newPage.file.getLimitedWebPartManager();
+        return expect(scope).to.be.equal(0);
+    });
 
-            const webparts = await lwm.webparts.get();
-
-            return expect(webparts).to.be.an.instanceOf(Array).and.be.empty;
-        });
-
-        // Reason: The current implementation of the "import" method gives an empty SP.WebParts.WebPartDefinition and
-        // a HTTP 200 in return (JSOM API). The ID of the returned webpart definition is an empty guid.
-        it("import");
-
-        // Reason: we cannot automate tests of the "export" method because the "addWebPart" method is not implemented.
-        // This means that we cannot write a testcase that creates a new page, inserts a webpart, which we then could manipulate.
-        it("export");
-    }
+    it("webpartDefinitions", async function () {
+        const currentWeb = await this.pnp.sp.web.select("ServerRelativeUrl")();
+        const pageName = `Test_Page_${getRandomString(5)}.aspx`;
+        const pageAddress = combine("/", currentWeb.ServerRelativeUrl, "/SitePages/", pageName);
+        await this.pnp.sp.web.addClientsidePage(pageName);
+        const lwm: ILimitedWebPartManager = this.pnp.sp.web.getFileByUrl(pageAddress).getLimitedWebPartManager();
+        const webparts = await lwm.webparts();
+        return expect(webparts).to.be.an.instanceOf(Array).and.be.empty;
+    });
 });

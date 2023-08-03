@@ -1,26 +1,26 @@
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { ISite, Site } from "./types.js";
 
 export {
     IOpenWebByIdResult,
     ISite,
     Site,
-    IContextInfo,
     IDocumentLibraryInformation,
+    SiteLogoAspect,
+    SiteLogoType,
+    ISiteLogoProperties,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
         readonly site: ISite;
     }
 }
 
-Reflect.defineProperty(SPRest.prototype, "site", {
+Reflect.defineProperty(SPFI.prototype, "site", {
     configurable: true,
     enumerable: true,
-    get: function (this: SPRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return Site(baseUrl).configure(options).setRuntime(runtime);
-        });
+    get: function (this: SPFI) {
+        return this.create(Site);
     },
 });

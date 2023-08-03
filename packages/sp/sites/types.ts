@@ -1,27 +1,68 @@
-import { SharePointQueryable, _SharePointQueryableInstance, spInvokableFactory } from "../sharepointqueryable.js";
+import { _SPInstance, spInvokableFactory, SPInit, SPQueryable } from "../spqueryable.js";
 import { defaultPath } from "../decorators.js";
 import { Web, IWeb } from "../webs/types.js";
-import { hOP, assign } from "@pnp/common";
-import { body } from "@pnp/odata";
-import { odataUrlFrom } from "../odata.js";
-import { spPost } from "../operations.js";
-import { SPBatch } from "../batch.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
+import { combine, hOP, isArray } from "@pnp/core";
+import { body, TextParse } from "@pnp/queryable";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
+import { spPatch, spPost } from "../operations.js";
 import { IChangeQuery } from "../types.js";
-import { tag } from "../telemetry.js";
-import { metadata } from "../utils/metadata.js";
-import { extractWebUrl } from "../utils/extractweburl.js";
-import { emptyGuid } from "../splibconfig.js";
+import { extractWebUrl } from "../utils/extract-web-url.js";
+import { emptyGuid } from "../types.js";
+
+/**
+ * Ensures that whatever url is passed to the constructor we can correctly rebase it to a site url
+ *
+ * @param candidate The candidate site url
+ * @param path The caller supplied path, which may contain _api, meaning we don't append _api/site
+ */
+function rebaseSiteUrl(candidate: string, path: string | undefined): string {
+
+    let replace = "_api/site";
+
+    // this allows us to both:
+    // - test if `candidate` already has an api path
+    // - ensure that we append the correct one as sometimes a web is not defined
+    //   by _api/web, in the case of _api/site/rootweb for example
+    const matches = /(_api[/|\\](site|web))/i.exec(candidate);
+    if (matches?.length > 0) {
+
+        // we want just the base url part (before the _api)
+        candidate = extractWebUrl(candidate);
+
+        // we want to ensure we put back the correct string
+        replace = matches[1];
+    }
+
+    // we only need to append the _api part IF `path` doesn't already include it.
+    if (path?.indexOf("_api") < 0) {
+        candidate = combine(candidate, replace);
+    }
+
+    return candidate;
+}
 
 @defaultPath("_api/site")
-export class _Site extends _SharePointQueryableInstance {
+export class _Site extends _SPInstance<ISiteInfo> {
+
+    constructor(base: SPInit, path?: string) {
+
+        if (typeof base === "string") {
+            base = rebaseSiteUrl(base, path);
+        } else if (isArray(base)) {
+            base = [base[0], rebaseSiteUrl(base[1], path)];
+        } else {
+            base = [base, rebaseSiteUrl(base.toUrl(), path)];
+        }
+
+        super(base, path);
+    }
 
     /**
      * Gets the root web of the site collection
      *
      */
     public get rootWeb(): IWeb {
-        return tag.configure(Web(this, "rootweb"), "si.rootWeb");
+        return Web(this, "rootweb");
     }
 
     /**
@@ -29,11 +70,10 @@ export class _Site extends _SharePointQueryableInstance {
      *
      * @param query The change query
      */
-    @tag("si.getChanges")
     public getChanges(query: IChangeQuery): Promise<any> {
 
-        const postBody = body({ "query": assign(metadata("SP.ChangeQuery"), query) });
-        return spPost(this.clone(Web, "getchanges"), postBody);
+        const postBody = body({ query });
+        return spPost(Web(this, "getchanges"), postBody);
     }
 
     /**
@@ -41,13 +81,11 @@ export class _Site extends _SharePointQueryableInstance {
      *
      * @param webId The GUID id of the web to open
      */
-    @tag("si.openWebById")
     public async openWebById(webId: string): Promise<IOpenWebByIdResult> {
-
-        const data = await spPost(this.clone(Site, `openWebById('${webId}')`));
+        const data = await spPost(Site(this, `openWebById('${webId}')`));
         return {
             data,
-            web: Web(extractWebUrl(odataUrlFrom(data))).configureFrom(this),
+            web: Web([this, extractWebUrl(odataUrlFrom(data))]),
         };
     }
 
@@ -57,28 +95,7 @@ export class _Site extends _SharePointQueryableInstance {
      */
     public async getRootWeb(): Promise<IWeb> {
         const web = await this.rootWeb.select("Url")<{ Url: string }>();
-        return tag.configure(Web(web.Url), "si.getRootWeb");
-    }
-
-    /**
-     * Gets the context information for this site collection
-     */
-    public async getContextInfo(): Promise<IContextInfo> {
-
-        const q = tag.configure(Site(this.parentUrl, "_api/contextinfo"), "si.getContextInfo");
-        const data = await spPost(q);
-
-        if (hOP(data, "GetContextWebInformation")) {
-            const info = data.GetContextWebInformation;
-            info.SupportedSchemaVersions = info.SupportedSchemaVersions.results;
-            return info;
-        } else {
-            return data;
-        }
-    }
-
-    public createBatch(): SPBatch {
-        return new SPBatch(this.parentUrl, this.getRuntime());
+        return Web([this, web.Url]);
     }
 
     /**
@@ -87,8 +104,8 @@ export class _Site extends _SharePointQueryableInstance {
      */
     public async delete(): Promise<void> {
 
-        const site = await this.clone(Site, "").select("Id")<{ Id: string }>();
-        const q = tag.configure(Site(this.parentUrl, "_api/SPSiteManager/Delete"), "si.delete");
+        const site = await Site(this, "").select("Id")<{ Id: string }>();
+        const q = Site([this, this.parentUrl], "_api/SPSiteManager/Delete");
         await spPost(q, body({ siteId: site.Id }));
     }
 
@@ -98,10 +115,9 @@ export class _Site extends _SharePointQueryableInstance {
      * @param absoluteWebUrl The absolute url of the web whose document libraries should be returned
      */
     public async getDocumentLibraries(absoluteWebUrl: string): Promise<IDocumentLibraryInformation[]> {
-
-        const q = tag.configure(SharePointQueryable("", "_api/sp.web.getdocumentlibraries(@v)"), "si.getDocumentLibraries");
-        q.query.set("@v", `'${escapeQueryStrValue(absoluteWebUrl)}'`);
-        const data = await q();
+        const q = Site([this, this.parentUrl], "_api/sp.web.getdocumentlibraries(@v)");
+        q.query.set("@v", `'${absoluteWebUrl}'`);
+        const data = await q<any>();
         return hOP(data, "GetDocumentLibraries") ? data.GetDocumentLibraries : data;
     }
 
@@ -112,9 +128,9 @@ export class _Site extends _SharePointQueryableInstance {
      */
     public async getWebUrlFromPageUrl(absolutePageUrl: string): Promise<string> {
 
-        const q = tag.configure(SharePointQueryable("", "_api/sp.web.getweburlfrompageurl(@v)"), "si.getWebUrlFromPageUrl");
-        q.query.set("@v", `'${escapeQueryStrValue(absolutePageUrl)}'`);
-        const data = await q();
+        const q = Site([this, this.parentUrl], "_api/sp.web.getweburlfrompageurl(@v)");
+        q.query.set("@v", `'${absolutePageUrl}'`);
+        const data = await q<any>();
         return hOP(data, "GetWebUrlFromPageUrl") ? data.GetWebUrlFromPageUrl : data;
     }
 
@@ -163,7 +179,7 @@ export class _Site extends _SharePointQueryableInstance {
     public async createCommunicationSiteFromProps(props: ICreateCommSiteProps): Promise<ISiteCreationResponse> {
 
         // handle defaults
-        const p = Object.assign({}, {
+        const request = {
             Classification: "",
             Description: "",
             HubSiteId: emptyGuid,
@@ -172,13 +188,10 @@ export class _Site extends _SharePointQueryableInstance {
             SiteDesignId: emptyGuid,
             WebTemplate: "SITEPAGEPUBLISHING#0",
             WebTemplateExtensionId: emptyGuid,
-        }, props);
+            ...props,
+        };
 
-        const postBody = body({
-            "request": assign(metadata("Microsoft.SharePoint.Portal.SPSiteCreationRequest"), p),
-        });
-
-        return spPost(Site(extractWebUrl(this.toUrl()), "/_api/SPSiteManager/Create"), postBody);
+        return spPost(Site([this, extractWebUrl(this.toUrl())], "/_api/SPSiteManager/Create"), body({ request }));
     }
 
     /**
@@ -186,11 +199,8 @@ export class _Site extends _SharePointQueryableInstance {
      * @param url Site Url that you want to check if exists
      */
     public async exists(url: string): Promise<boolean> {
-        const postBody = body({ url });
 
-        const value = await spPost(Site(extractWebUrl(this.toUrl()), "/_api/SP.Site.Exists"), postBody);
-
-        return value;
+        return spPost(Site([this, extractWebUrl(this.toUrl())], "/_api/SP.Site.Exists"), body({ url }));
     }
 
     /**
@@ -247,24 +257,35 @@ export class _Site extends _SharePointQueryableInstance {
             isPublic: p.isPublic,
             optionalParams: {
                 Classification: p.classification,
-                CreationOptions: {
-                    "results": [`SPSiteLanguage:${p.lcid}`, `HubSiteId:${p.hubSiteId}`],
-                },
+                CreationOptions: [`SPSiteLanguage:${p.lcid}`, `HubSiteId:${p.hubSiteId}`],
+
                 Description: p.description,
-                Owners: {
-                    "results": p.owners,
-                },
+                Owners: p.owners,
             },
         };
 
         if (p.siteDesignId) {
-            postBody.optionalParams.CreationOptions.results.push(`implicit_formula_292aa8a00786498a87a5ca52d9f4214a_${p.siteDesignId}`);
+            postBody.optionalParams.CreationOptions.push(`implicit_formula_292aa8a00786498a87a5ca52d9f4214a_${p.siteDesignId}`);
         }
 
-        return spPost(Site(extractWebUrl(this.toUrl()), "/_api/GroupSiteManager/CreateGroupEx"), body(postBody));
+        return spPost(Site([this, extractWebUrl(this.toUrl())], "/_api/GroupSiteManager/CreateGroupEx").using(TextParse()), body(postBody));
+    }
+
+    public update(props: ISiteInfo): Promise<any> {
+
+        return spPatch(this, body(props));
+    }
+
+    /**
+     * Set's the site's `Site Logo` property, vs the Site Icon property available on the web's properties
+     *
+     * @param logoProperties An instance of ISiteLogoProperties which sets the new site logo.
+     */
+    public setSiteLogo(logoProperties: ISiteLogoProperties): Promise<void> {
+        return spPost(SPQueryable([this, extractWebUrl(this.toUrl())], "_api/siteiconmanager/setsitelogo"), body(logoProperties) );
     }
 }
-export interface ISite extends _Site {}
+export interface ISite extends _Site { }
 export const Site = spInvokableFactory<ISite>(_Site);
 
 /**
@@ -276,26 +297,18 @@ export interface IOpenWebByIdResult {
 }
 
 /**
- * This is the interface to expose data i.e. context information of a site
- */
-export interface IContextInfo {
-    FormDigestTimeoutSeconds?: number;
-    FormDigestValue?: number;
-    LibraryVersion?: string;
-    SiteFullUrl?: string;
-    SupportedSchemaVersions?: string[];
-    WebFullUrl?: string;
-}
-
-/**
  * This is the interface to expose data for Document Library
  */
 export interface IDocumentLibraryInformation {
-    AbsoluteUrl?: string;
-    Modified?: Date;
-    ModifiedFriendlyDisplay?: string;
-    ServerRelativeUrl?: string;
-    Title?: string;
+    AbsoluteUrl: string;
+    DriveId: string;
+    FromCrossFarm: boolean;
+    Id: string;
+    IsDefaultDocumentLibrary: boolean;
+    Modified: string;
+    ModifiedFriendlyDisplay: string;
+    ServerRelativeUrl: string;
+    Title: string;
 }
 
 export interface ICreateCommSiteProps {
@@ -328,4 +341,82 @@ export interface ISiteCreationResponse {
     "SiteId": string;
     "SiteStatus": 0 | 1 | 2 | 3;
     "SiteUrl": string;
+}
+
+export interface ISiteInfo {
+    AllowCreateDeclarativeWorkflow: boolean;
+    AllowDesigner: boolean;
+    AllowMasterPageEditing: boolean;
+    AllowRevertFromTemplate: boolean;
+    AllowSaveDeclarativeWorkflowAsTemplate: boolean;
+    AllowSavePublishDeclarativeWorkflow: boolean;
+    AllowSelfServiceUpgrade: boolean;
+    AllowSelfServiceUpgradeEvaluation: boolean;
+    AuditLogTrimmingRetention: number;
+    ChannelGroupId: string;
+    Classification: string;
+    CompatibilityLevel: number;
+    CurrentChangeToken: { StringValue: string };
+    DisableAppViews: boolean;
+    DisableCompanyWideSharingLinks: boolean;
+    DisableFlows: boolean;
+    ExternalSharingTipsEnabled: boolean;
+    GeoLocation: string;
+    GroupId: string;
+    HubSiteId: string;
+    Id: string;
+    IsHubSite: boolean;
+    LockIssue: string | null;
+    MaxItemsPerThrottledOperation: number;
+    MediaTranscriptionDisabled: boolean;
+    NeedsB2BUpgrade: boolean;
+    PrimaryUri: string;
+    ReadOnly: boolean;
+    RequiredDesignerVersion: string;
+    ResourcePath: { DecodedUrl: string };
+    SandboxedCodeActivationCapability: number;
+    SensitivityLabel: string;
+    SensitivityLabelId: string | null;
+    ServerRelativeUrl: string;
+    ShareByEmailEnabled: boolean;
+    ShareByLinkEnabled: boolean;
+    ShowUrlStructure: boolean;
+    TrimAuditLog: boolean;
+    UIVersionConfigurationEnabled: boolean;
+    UpgradeReminderDate: string;
+    UpgradeScheduled: boolean;
+    UpgradeScheduledDate: string;
+    Upgrading: boolean;
+    Url: string;
+    WriteLocked: boolean;
+}
+
+export const enum SiteLogoType {
+    /**
+     * Site header logo
+     */
+    WebLogo = 0,
+    /**
+     * Hub site logo
+     */
+    HubLogo = 1,
+    /**
+     * Header background image
+     */
+    HeaderBackground = 2,
+    /**
+     * Global navigation logo
+     */
+    GlobalNavLogo = 3
+}
+
+export const enum SiteLogoAspect {
+    Square = 0,
+    Rectangular = 1,
+}
+
+export interface ISiteLogoProperties {
+    relativeLogoUrl: string;
+    type: SiteLogoType;
+    aspect: SiteLogoAspect;
 }

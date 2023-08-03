@@ -1,93 +1,93 @@
 import { expect } from "chai";
-import { sp } from "@pnp/sp";
-import { testSettings } from "../main.js";
 import "@pnp/sp/site-users";
-import { IInvokableTest } from "../types.js";
-import { ISiteUserProps, IUserUpdateResult } from "@pnp/sp/site-users";
+import { ISiteUserProps, IUserUpdateResult, ISiteUserInfo } from "@pnp/sp/site-users";
 import { ISiteGroups } from "@pnp/sp/presets/all";
-import { stringIsNullOrEmpty } from "@pnp/common";
+import { stringIsNullOrEmpty } from "@pnp/core";
 
-describe("Web", () => {
-    if (testSettings.enableWebTests) {
-        describe("Invokable Properties", () => {
-            const tests: IInvokableTest[] = [
-                { desc: ".siteUsers", test: sp.web.siteUsers },
-                { desc: ".currentUser", test: sp.web.currentUser },
-            ];
-            tests.forEach((testObj) => {
-                const { test, desc } = testObj;
-                it(desc, () => expect((<any>test)()).to.eventually.fulfilled);
-            });
+function testISiteUserInfo(siteUser: ISiteUserInfo): boolean {
+    return Reflect.has(siteUser, "Email") &&
+        Reflect.has(siteUser, "Id") &&
+        Reflect.has(siteUser, "IsHiddenInUI") &&
+        Reflect.has(siteUser, "IsShareByEmailGuestUser") &&
+        Reflect.has(siteUser, "IsSiteAdmin") &&
+        Reflect.has(siteUser, "LoginName") &&
+        Reflect.has(siteUser, "PrincipalType") &&
+        Reflect.has(siteUser, "Title") &&
+        Reflect.has(siteUser, "Expiration") &&
+        Reflect.has(siteUser, "IsEmailAuthenticationGuestUser") &&
+        Reflect.has(siteUser, "UserId") &&
+        Reflect.has(siteUser, "UserPrincipalName");
+}
+
+describe("Site Users", function () {
+
+    before(function () {
+
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
+
+    describe(".web", function () {
+
+        it("siteUsers", async function () {
+            const siteUsers: ISiteUserInfo[] = await this.pnp.sp.web.siteUsers();
+            const hasResults = siteUsers.length > 0;
+            const siteUser = siteUsers[0];
+            const hasProps = testISiteUserInfo(siteUser);
+            return expect(hasResults && hasProps).to.be.true;
         });
 
-        it(".ensureUser", async function () {
-            const e: ISiteUserProps = await sp.web.currentUser();
-            return expect(sp.web.ensureUser(e.LoginName)).to.eventually.fulfilled;
+        it("currentUser", async function () {
+            const currentUser: ISiteUserInfo = await this.pnp.sp.web.currentUser();
+            const hasProps = testISiteUserInfo(currentUser);
+            return expect(hasProps).to.be.true;
         });
 
-        it(".getUserById", async function () {
-            const user: ISiteUserProps = await sp.web.currentUser();
-            return expect(sp.web.getUserById(user.Id)()).to.eventually.fulfilled;
-        });
-    }
-});
-
-describe("Site Users", () => {
-    if (testSettings.enableWebTests) {
-        it(".getByID", async function () {
-            const e: ISiteUserProps = await sp.web.currentUser();
-            return expect(sp.web.siteUsers.getById(e.Id)()).to.eventually.fulfilled;
+        it("ensureUser", async function () {
+            const e: ISiteUserProps = await this.pnp.sp.web.currentUser();
+            return expect(this.pnp.sp.web.ensureUser(e.LoginName)).to.eventually.fulfilled;
         });
 
-        it(".getByEmail", async function () {
-            const e: ISiteUserProps = await sp.web.currentUser();
+        it("getUserById", async function () {
+            const user: ISiteUserProps = await this.pnp.sp.web.currentUser();
+            return expect(this.pnp.sp.web.getUserById(user.Id)()).to.eventually.fulfilled;
+        });
+    });
+
+    describe(".siteUsers", function () {
+
+        it("getById", async function () {
+            const e: ISiteUserProps = await this.pnp.sp.web.currentUser();
+            return expect(this.pnp.sp.web.siteUsers.getById(e.Id)()).to.eventually.fulfilled;
+        });
+
+        it("getByEmail", async function () {
+            const e: ISiteUserProps = await this.pnp.sp.web.currentUser();
             if (!stringIsNullOrEmpty(e.Email)) {
-                return expect(sp.web.siteUsers.getByEmail(e.Email)()).to.eventually.fulfilled;
+                return expect(this.pnp.sp.web.siteUsers.getByEmail(e.Email)()).to.eventually.fulfilled;
             }
         });
 
-        it(".getByLoginName", async function () {
-            const e: ISiteUserProps = await sp.web.currentUser();
-            return expect(sp.web.siteUsers.getByLoginName(e.LoginName)()).to.eventually.fulfilled;
+        it("getByLoginName", async function () {
+            const e: ISiteUserProps = await this.pnp.sp.web.currentUser();
+            return expect(this.pnp.sp.web.siteUsers.getByLoginName(e.LoginName)()).to.eventually.fulfilled;
         });
-    }
-});
+    });
 
-describe("Site User", () => {
-    if (testSettings.enableWebTests) {
-        it(".groups", async function () {
-            const e: ISiteGroups = await sp.web.currentUser.groups();
+    describe(".currentUser", function () {
+
+        it("groups", async function () {
+            const e: ISiteGroups = await this.pnp.sp.web.currentUser.groups();
             return expect(e.length).to.be.gte(0);
         });
-        it(".update", async function () {
-            const _props: ISiteUserProps = await sp.web.currentUser();
+
+        it("update", async function () {
+            const _props: ISiteUserProps = await this.pnp.sp.web.currentUser();
             _props.Title = "Changed Title";
-            const e: IUserUpdateResult = await sp.web.currentUser.update(_props);
-            const _newProps = await e.user.get();
+            const e: IUserUpdateResult = await this.pnp.sp.web.currentUser.update(_props);
+            const _newProps = await e.user();
             return expect(_newProps.Title).to.be.eq("Changed Title");
         });
-
-    }
+    });
 });
-
-describe("Site User Properties", () => {
-    if (testSettings.enableWebTests) {
-        const tests: IInvokableTest[] = [
-            { desc: ".Email", test: sp.web.currentUser },
-            { desc: ".Id", test: sp.web.currentUser },
-            { desc: ".IsHiddenInUI", test: sp.web.currentUser },
-            { desc: ".IsShareByEmailGuestUser", test: sp.web.currentUser },
-            { desc: ".IsSiteAdmin", test: sp.web.currentUser },
-            { desc: ".LoginName", test: sp.web.currentUser },
-            { desc: ".PrincipalType", test: sp.web.currentUser },
-            { desc: ".Title", test: sp.web.currentUser },
-        ];
-        tests.forEach((testObj) => {
-            const { test, desc } = testObj;
-            it(desc, () => expect((<any>test)()).to.eventually.fulfilled);
-        });
-    }
-});
-
-
-

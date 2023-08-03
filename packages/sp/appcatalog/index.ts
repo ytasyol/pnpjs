@@ -1,8 +1,8 @@
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { IWeb, Web } from "../webs/types.js";
+import { AppCatalog, IAppCatalog } from "./types.js";
 
 import "./web.js";
-import { SharePointQueryable } from "../sharepointqueryable.js";
 
 export {
     IAppAddResult,
@@ -12,16 +12,24 @@ export {
     AppCatalog,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
+        tenantAppcatalog: IAppCatalog;
         getTenantAppCatalogWeb(): Promise<IWeb>;
     }
 }
 
-SPRest.prototype.getTenantAppCatalogWeb = async function (this: SPRest): Promise<IWeb> {
+Reflect.defineProperty(SPFI.prototype, "tenantAppcatalog", {
+    configurable: true,
+    enumerable: true,
+    get: function (this: SPFI) {
+        return this.create(AppCatalog, "_api/web/tenantappcatalog/AvailableApps");
+    },
+});
 
-    return this.childConfigHook(async ({ options, runtime }) => {
-        const data: { CorporateCatalogUrl: string } = await SharePointQueryable("/", "_api/SP_TenantSettings_Current").configure(options).setRuntime(runtime)();
-        return Web(data.CorporateCatalogUrl).configure(options).setRuntime(runtime);
-    });
+SPFI.prototype.getTenantAppCatalogWeb = async function (this: SPFI): Promise<IWeb> {
+
+    const data = await Web(this._root, "_api/SP_TenantSettings_Current")<{ CorporateCatalogUrl: string }>();
+
+    return Web([this._root, data.CorporateCatalogUrl]);
 };

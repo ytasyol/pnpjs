@@ -1,6 +1,6 @@
-import * as findup from "findup-sync";
-import { ConsoleListener, LogLevel, Logger } from "@pnp/logging";
-import { ITestingSettings } from "../../test/settings.js";
+import findup from "findup-sync";
+import { ConsoleListener, Logger, LogLevel } from "@pnp/logging";
+import { ITestingSettings } from "../../test/load-settings.js";
 
 // importing the example debug scenario and running it
 // adding your debugging to other files and importing them will keep them out of git
@@ -17,15 +17,19 @@ import { Example } from "./sp.js";
 // if you don't have a settings file defined this will error
 // you can comment it out and put the values here directly, or better yet
 // create a settings file using settings.example.js as a template
-import(findup("settings.js")).then((settings: ITestingSettings) => {
+import(findup("settings.js")).then((settings: { settings: ITestingSettings }) => {
 
-    // // setup console logger
-    Logger.subscribe(new ConsoleListener());
-
-    // change this to LogLevel.Verbose for more details about the request
     Logger.activeLogLevel = LogLevel.Info;
 
-    Example(settings);
+    // // setup console logger
+    Logger.subscribe(ConsoleListener("Debug", {
+        color: "skyblue",
+        error: "red",
+        verbose: "lightslategray",
+        warning: "yellow",
+    }));
+
+    Example(settings.settings);
 
     // you can also set break points inside the src folder to examine how things are working
     // within the library while debugging

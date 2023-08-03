@@ -1,17 +1,15 @@
-import { _SharePointQueryable, ISharePointQueryable } from "../sharepointqueryable.js";
-import { extractWebUrl } from "../utils/extractweburl.js";
+import { _SPQueryable, ISPQueryable } from "../spqueryable.js";
+import { extractWebUrl } from "../utils/extract-web-url.js";
 import { defaultPath } from "../decorators.js";
 import { spPost } from "../operations.js";
-import { body } from "@pnp/odata";
-import { tag } from "../telemetry.js";
+import { body } from "@pnp/queryable";
 
 @defaultPath("_api/SP.RelatedItemManager")
-export class _RelatedItemManager extends _SharePointQueryable implements IRelatedItemManager {
+export class _RelatedItemManager extends _SPQueryable implements IRelatedItemManager {
 
-    @tag("rim.getRelatedItems")
     public getRelatedItems(sourceListName: string, sourceItemId: number): Promise<IRelatedItem[]> {
 
-        const query = this.clone(<any>RelatedItemManager, null);
+        const query = <any>RelatedItemManager(this);
         query.concat(".GetRelatedItems");
 
         return spPost(query, body({
@@ -20,10 +18,9 @@ export class _RelatedItemManager extends _SharePointQueryable implements IRelate
         }));
     }
 
-    @tag("rim.getPageOneRelatedItems")
     public getPageOneRelatedItems(sourceListName: string, sourceItemId: number): Promise<IRelatedItem[]> {
 
-        const query = this.clone(<any>RelatedItemManager, null);
+        const query = <any>RelatedItemManager(this);
         query.concat(".GetPageOneRelatedItems");
 
         return spPost(query, body({
@@ -32,7 +29,6 @@ export class _RelatedItemManager extends _SharePointQueryable implements IRelate
         }));
     }
 
-    @tag("rim.addSingleLink")
     public addSingleLink(sourceListName: string,
         sourceItemId: number,
         sourceWebUrl: string,
@@ -41,7 +37,7 @@ export class _RelatedItemManager extends _SharePointQueryable implements IRelate
         targetWebUrl: string,
         tryAddReverseLink = false): Promise<void> {
 
-        const query = this.clone(<any>RelatedItemManager, null);
+        const query = <any>RelatedItemManager(this);
         query.concat(".AddSingleLink");
 
         return spPost(query, body({
@@ -55,10 +51,9 @@ export class _RelatedItemManager extends _SharePointQueryable implements IRelate
         }));
     }
 
-    @tag("rim.ToUrl")
     public addSingleLinkToUrl(sourceListName: string, sourceItemId: number, targetItemUrl: string, tryAddReverseLink = false): Promise<void> {
 
-        const query = this.clone(<any>RelatedItemManager, null);
+        const query = <any>RelatedItemManager(this);
         query.concat(".AddSingleLinkToUrl");
 
         return spPost(query, body({
@@ -69,10 +64,9 @@ export class _RelatedItemManager extends _SharePointQueryable implements IRelate
         }));
     }
 
-    @tag("rim.FromUrl")
     public addSingleLinkFromUrl(sourceItemUrl: string, targetListName: string, targetItemId: number, tryAddReverseLink = false): Promise<void> {
 
-        const query = this.clone(<any>RelatedItemManager, null);
+        const query = <any>RelatedItemManager(this);
         query.concat(".AddSingleLinkFromUrl");
 
         return spPost(query, body({
@@ -83,7 +77,6 @@ export class _RelatedItemManager extends _SharePointQueryable implements IRelate
         }));
     }
 
-    @tag("rim.deleteSingleLink")
     public deleteSingleLink(sourceListName: string,
         sourceItemId: number,
         sourceWebUrl: string,
@@ -92,7 +85,7 @@ export class _RelatedItemManager extends _SharePointQueryable implements IRelate
         targetWebUrl: string,
         tryDeleteReverseLink = false): Promise<void> {
 
-        const query = this.clone(<any>RelatedItemManager, null);
+        const query = <any>RelatedItemManager(this);
         query.concat(".DeleteSingleLink");
 
         return spPost(query, body({
@@ -184,7 +177,12 @@ export interface IRelatedItemManager {
         tryDeleteReverseLink?: boolean): Promise<void>;
 }
 
-export const RelatedItemManager = (url: string | ISharePointQueryable): IRelatedItemManager => new _RelatedItemManager(extractWebUrl(typeof url === "string" ? url : url.toUrl()));
+export const RelatedItemManager = (base: string | ISPQueryable): IRelatedItemManager => {
+    if (typeof base === "string") {
+        return new _RelatedItemManager(extractWebUrl(base));
+    }
+    return new _RelatedItemManager([base, extractWebUrl(base.toUrl())]);
+};
 
 export interface IRelatedItem {
     ListId: string;

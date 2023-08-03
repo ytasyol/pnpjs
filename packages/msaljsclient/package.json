@@ -5,20 +5,8 @@
     "main": "./index.js",
     "typings": "./index",
     "dependencies": {
-        "@pnp/common": "0.0.0-PLACEHOLDER",
-        "msal": "1.4.6",
-        "tslib": "2.1.0"
-    },
-    "author": {
-        "name": "Microsoft and other contributors"
-    },
-    "license": "MIT",
-    "bugs": {
-        "url": "https://github.com/pnp/pnpjs/issues"
-    },
-    "homepage": "https://github.com/pnp/pnpjs",
-    "repository": {
-        "type": "git",
-        "url": "git:github.com/pnp/pnpjs"
+        "@pnp/queryable": "0.0.0-PLACEHOLDER",
+        "msal": "1.4.17",
+        "tslib": "2.4.1"
     }
 }

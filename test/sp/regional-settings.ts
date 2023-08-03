@@ -1,62 +1,58 @@
 import { expect } from "chai";
-import { testSettings } from "../main.js";
-import { sp } from "@pnp/sp";
 import "@pnp/sp/webs";
 import "@pnp/sp/regional-settings";
 
-describe("Regional Settings", () => {
+describe("Regional Settings", function () {
 
-    if (testSettings.enableWebTests) {
+    before(function () {
 
-        it("regionalsettings()", function () {
-            return expect(sp.web.regionalSettings()).to.eventually.be.fulfilled;
-        });
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
 
-        it("regionalsettings.select()()", function () {
-            return expect(sp.web.regionalSettings.select("DecimalSeparator", "ListSeparator", "IsUIRightToLeft")()).to.eventually.be.fulfilled;
-        });
+    it("regionalsettings()", function () {
+        return expect(this.pnp.sp.web.regionalSettings()).to.eventually.be.fulfilled;
+    });
 
-        it("getInstalledLanguages", function () {
-            return expect(sp.web.regionalSettings.getInstalledLanguages()).to.eventually.be.fulfilled;
-        });
+    it("regionalsettings.select()()", function () {
+        return expect(this.pnp.sp.web.regionalSettings.select("DecimalSeparator", "ListSeparator", "IsUIRightToLeft")()).to.eventually.be.fulfilled;
+    });
 
-        it("timeZones", function () {
-            return expect(sp.web.regionalSettings.timeZones()).to.eventually.be.fulfilled;
-        });
+    it("getInstalledLanguages", function () {
+        return expect(this.pnp.sp.web.regionalSettings.getInstalledLanguages()).to.eventually.be.fulfilled;
+    });
 
-        it("timeZones.getById", function () {
-            return expect(sp.web.regionalSettings.timeZones.getById(23)).to.eventually.be.fulfilled;
-        });
+    it("timeZones", function () {
+        return expect(this.pnp.sp.web.regionalSettings.timeZones()).to.eventually.be.fulfilled;
+    });
 
-        it("timeZones.getById used", async function () {
+    it("timeZones.getById", async function () {
 
-            const tz = await sp.web.regionalSettings.timeZones.getById(23);
+        const tz = await this.pnp.sp.web.regionalSettings.timeZones.getById(23);
 
-            expect(tz).to.haveOwnProperty("Description");
+        return expect(tz).to.haveOwnProperty("Description");
+    });
 
-            return expect(tz.utcToLocalTime(new Date())).to.eventually.be.fulfilled;
-        });
+    it("timeZone", function () {
+        return expect(this.pnp.sp.web.regionalSettings.timeZone()).to.eventually.be.fulfilled;
+    });
 
-        it("timeZone", function () {
-            return expect(sp.web.regionalSettings.timeZone()).to.eventually.be.fulfilled;
-        });
+    it("timeZone.localTimeToUTC", function () {
+        return expect(this.pnp.sp.web.regionalSettings.timeZone.localTimeToUTC(new Date())).to.eventually.be.fulfilled;
+    });
 
-        it("timeZone.localTimeToUTC", function () {
-            return expect(sp.web.regionalSettings.timeZone.localTimeToUTC(new Date())).to.eventually.be.fulfilled;
-        });
+    it("timeZone.utcToLocalTime", function () {
+        return expect(this.pnp.sp.web.regionalSettings.timeZone.utcToLocalTime(new Date())).to.eventually.be.fulfilled;
+    });
 
-        it("timeZone.utcToLocalTime", function () {
-            return expect(sp.web.regionalSettings.timeZone.utcToLocalTime(new Date())).to.eventually.be.fulfilled;
-        });
+    it("titleResource", function () {
 
-        it("handle language based titleResource", function () {
+        return expect(this.pnp.sp.web.titleResource("en-us")).to.eventually.be.fulfilled;
+    });
 
-            return expect(sp.web.titleResource("en-us")).to.eventually.be.fulfilled;
-        });
+    it("descriptionResource", function () {
 
-        it("handle language based descriptionResource", function () {
-
-            return expect(sp.web.descriptionResource("en-us")).to.eventually.be.fulfilled;
-        });
-    }
+        return expect(this.pnp.sp.web.descriptionResource("en-us")).to.eventually.be.fulfilled;
+    });
 });

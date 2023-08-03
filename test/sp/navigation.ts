@@ -1,86 +1,90 @@
-import { getRandomString } from "@pnp/common";
 import { expect } from "chai";
-import { sp } from "@pnp/sp";
-import { INavigationNodes } from "@pnp/sp/navigation";
-import { testSettings } from "../main.js";
 import "@pnp/sp/navigation";
 import "@pnp/sp/webs";
+import { INavigationNodes } from "@pnp/sp/navigation";
+import { getRandomString } from "@pnp/core";
 
-describe("Navigation Service", () => {
+describe("Navigation Service", function () {
 
-    if (testSettings.enableWebTests) {
+    before(function () {
 
-        it("getMenuState1", function () {
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
 
-            return expect(sp.navigation.getMenuState()).to.eventually.be.fulfilled;
-        });
+    it("getMenuState1", function () {
 
-        it("getMenuState2", async function () {
+        return expect(this.pnp.sp.navigation.getMenuState()).to.eventually.be.fulfilled;
+    });
 
-            const state = await sp.navigation.getMenuState(null, 3);
+    it("getMenuState2", async function () {
 
-            // ensure we find a node with a non -1 key
-            const node = state.Nodes[state.Nodes.reverse().findIndex(n => parseInt(n.Key, 10) > 0)];
+        const state = await this.pnp.sp.navigation.getMenuState(null, 3);
 
-            const state2 = await sp.navigation.getMenuState(node.Key);
+        // ensure we find a node with a non -1 key
+        const node = state.Nodes[state.Nodes.reverse().findIndex(n => parseInt(n.Key, 10) > 0)];
 
-            return expect(state2).to.have.property("StartingNodeKey", node.Key);
-        });
+        const state2 = await this.pnp.sp.navigation.getMenuState(node.Key);
 
-        it("getMenuState3", async function () {
+        return expect(state2).to.have.property("StartingNodeKey", node.Key);
+    });
 
-            return expect(sp.navigation.getMenuState(null, 3, "CurrentNavSiteMapProviderNoEncode")).to.eventually.be.fulfilled;
-        });
+    it("getMenuState3", async function () {
+
+        return expect(this.pnp.sp.navigation.getMenuState(null, 3, "CurrentNavSiteMapProviderNoEncode")).to.eventually.be.fulfilled;
+    });
 
 
-        it("getMenuNodeKey - Sucess 1", async function () {
+    it("getMenuNodeKey - Sucess 1", async function () {
 
-            const state = await sp.navigation.getMenuState(null, 3);
+        const state = await this.pnp.sp.navigation.getMenuState(null, 3);
 
-            const r = await sp.navigation.getMenuNodeKey(state.Nodes[1].SimpleUrl);
+        const r = await this.pnp.sp.navigation.getMenuNodeKey(state.Nodes[1].SimpleUrl);
 
-            expect(r.toLowerCase()).to.eq(state.Nodes[1].Key.toLowerCase());
-        });
+        expect(r.toLowerCase()).to.eq(state.Nodes[1].Key.toLowerCase());
+    });
 
-        it("getMenuNodeKey - Sucess 2", async function () {
+    it("getMenuNodeKey - Sucess 2", async function () {
 
-            const state = await sp.navigation.getMenuState(null, 3, "CurrentNavSiteMapProviderNoEncode");
+        const state = await this.pnp.sp.navigation.getMenuState(null, 3, "CurrentNavSiteMapProviderNoEncode");
 
-            const r = await sp.navigation.getMenuNodeKey(state.Nodes[0].SimpleUrl, "CurrentNavSiteMapProviderNoEncode");
+        const r = await this.pnp.sp.navigation.getMenuNodeKey(state.Nodes[0].SimpleUrl, "CurrentNavSiteMapProviderNoEncode");
 
-            expect(r.toLowerCase()).to.eq(state.Nodes[0].Key.toLowerCase());
-        });
+        expect(r.toLowerCase()).to.eq(state.Nodes[0].Key.toLowerCase());
+    });
 
-        it("getMenuNodeKey - Fail", function () {
+    it("getMenuNodeKey - Fail", function () {
 
-            return expect(sp.navigation.getMenuNodeKey("/some/page/not/there.aspx")).to.eventually.be.rejected;
-        });
-    }
+        return expect(this.pnp.sp.navigation.getMenuNodeKey("/some/page/not/there.aspx")).to.eventually.be.rejected;
+    });
 });
 
-describe("navigation", () => {
+// TODO: Fix const declaration of navs in declare.
+describe("navigation", function () {
 
-    if (testSettings.enableWebTests) {
+    let url = "";
+
+    before(async function () {
+
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
 
         const navs: INavigationNodes[] = [
-            sp.web.navigation.topNavigationBar,
-            sp.web.navigation.quicklaunch,
+            this.pnp.sp.web.navigation.topNavigationBar,
+            this.pnp.sp.web.navigation.quicklaunch,
         ];
 
-        let url = "";
+        const webData = await this.pnp.sp.web.select("ServerRelativeUrl")();
+        url = webData.ServerRelativeUrl;
 
-        before(async function () {
-
-            const webData = await sp.web.select("ServerRelativeUrl")();
-            url = webData.ServerRelativeUrl;
-
-            // ensure we have at least one node in each nav
-            navs.forEach(async function (nav) {
-                const nodes = await nav();
-                if (nodes.length < 1) {
-                    await nav.add("Testing Node", url, true);
-                }
-            });
+        // ensure we have at least one node in each nav
+        navs.forEach(async function (nav) {
+            const nodes = await nav();
+            if (nodes.length < 1) {
+                await nav.add("Testing Node", url, true);
+            }
         });
 
         navs.forEach(function (nav) {
@@ -159,5 +163,5 @@ describe("navigation", () => {
                 expect(children.length).to.eq(2);
             });
         });
-    }
+    });
 });

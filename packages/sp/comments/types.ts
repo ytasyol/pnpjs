@@ -1,36 +1,30 @@
 import { defaultPath } from "../decorators.js";
 import {
-    _SharePointQueryableInstance,
-    _SharePointQueryableCollection,
+    _SPCollection,
     spInvokableFactory,
-} from "../sharepointqueryable.js";
-import { assign } from "@pnp/common";
-import { odataUrlFrom } from "../odata.js";
-import { metadata } from "../utils/metadata.js";
-import { body } from "@pnp/odata";
-import { spPost } from "../operations.js";
-import { tag } from "../telemetry.js";
+    _SPInstance,
+} from "../spqueryable.js";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
+import { body } from "@pnp/queryable";
+import { spDelete, spPost } from "../operations.js";
 
 @defaultPath("comments")
-export class _Comments extends _SharePointQueryableCollection<ICommentInfo[]> {
+export class _Comments extends _SPCollection<ICommentInfo[]> {
 
     /**
      * Adds a new comment to this collection
      *
      * @param info Comment information to add
      */
-    @tag("coms.add")
     public async add(info: string | ICommentInfo): Promise<IComment & ICommentInfo> {
 
         if (typeof info === "string") {
             info = <ICommentInfo>{ text: info };
         }
 
-        const postBody = body(assign(metadata("Microsoft.SharePoint.Comments.comment"), info));
+        const d = await spPost(Comments(this, null), body(info));
 
-        const d = await spPost(this.clone(Comments, null), postBody);
-
-        return assign(this.getById(d.id), d);
+        return Object.assign(this.getById(d.id), d);
     }
 
     /**
@@ -39,78 +33,72 @@ export class _Comments extends _SharePointQueryableCollection<ICommentInfo[]> {
      * @param id Id of the comment to load
      */
     public getById(id: string | number): IComment {
-        return tag.configure(Comment(this).concat(`(${id})`), "coms.getById");
+        return Comment(this).concat(`(${id})`);
     }
 
     /**
      * Deletes all the comments in this collection
      */
     public clear(): Promise<boolean> {
-        return spPost<boolean>(tag.configure(this.clone(Comments, "DeleteAll"), "coms.clear"));
+        return spPost<boolean>(Comments(this, "DeleteAll"));
     }
 }
-export interface IComments extends _Comments {}
+export interface IComments extends _Comments { }
 export const Comments = spInvokableFactory<IComments>(_Comments);
 
-export class _Comment extends _SharePointQueryableInstance<ICommentInfo> {
+export class _Comment extends _SPInstance<ICommentInfo> {
 
     /**
      * A comment's replies
      */
     public get replies(): IReplies {
-        return tag.configure(Replies(this), "com.replies");
+        return Replies(this);
     }
 
     /**
      * Likes the comment as the current user
      */
-    @tag("com.like")
     public like(): Promise<void> {
-        return spPost(this.clone(Comment, "Like"));
+        return spPost(Comment(this, "Like"));
     }
 
     /**
      * Unlikes the comment as the current user
      */
-    @tag("com.unlike")
     public unlike(): Promise<void> {
-        return spPost(this.clone(Comment, "Unlike"));
+        return spPost(Comment(this, "Unlike"));
     }
 
     /**
      * Deletes this comment
      */
-    @tag("com.delete")
     public delete(): Promise<void> {
-        return spPost(this.clone(Comment, "DeleteComment"));
+        return spDelete(this);
     }
 }
-export interface IComment extends _Comment {}
+export interface IComment extends _Comment { }
 export const Comment = spInvokableFactory<IComment>(_Comment);
 
 @defaultPath("replies")
-export class _Replies extends _SharePointQueryableCollection<ICommentInfo[]> {
+export class _Replies extends _SPCollection<ICommentInfo[]> {
 
     /**
      * Adds a new reply to this collection
      *
      * @param info Comment information to add
      */
-    @tag("reps.add")
-    public async add(info: string | ICommentInfo): Promise<IComment & ICommentInfo> {
+    public async add(info: string | Partial<ICommentInfo>): Promise<IComment & ICommentInfo> {
 
         if (typeof info === "string") {
             info = <ICommentInfo>{ text: info };
         }
 
-        const postBody = body(assign(metadata("Microsoft.SharePoint.Comments.comment"), info));
+        const d = await spPost(Replies(this, null), body(info));
 
-        const d = await spPost(this.clone(Replies, null), postBody);
-
-        return assign(Comment(odataUrlFrom(d)), d);
+        return Object.assign(Comment([this, odataUrlFrom(d)]), d);
     }
 }
-export interface IReplies extends _Replies {}
+export interface IReplies extends _Replies { }
 export const Replies = spInvokableFactory<IReplies>(_Replies);
 
 /**
@@ -140,11 +128,11 @@ export interface ICommentInfo {
     itemId: number;
     likeCount: number;
     listId: string;
-    mentions: {
+    mentions: [{
         loginName: string;
         email: string;
         name: string;
-    } | null;
+    }] | null;
     parentId: string;
     replyCount: number;
     text: string;
@@ -169,3 +157,4 @@ export interface ILikedByInformation {
     isLikedByUser: boolean;
     likeCount: number;
 }
+export type RatingValues = 1|2|3|4|5;

@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Group } from "../groups/types.js";
 import { Calendar, ICalendar, IEvents, Events } from "./types.js";
 
@@ -15,5 +15,5 @@ declare module "../groups/types" {
     }
 }
 
-addProp(_Group, "calendar", Calendar, "calendar");
+addProp(_Group, "calendar", Calendar);
 addProp(_Group, "events", Events);

@@ -1,5 +1,5 @@
 import "./web.js";
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { ISiteDesigns, SiteDesigns } from "./types.js";
 
 export {
@@ -14,18 +14,16 @@ export {
     ISiteScriptActionStatus,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
         readonly siteDesigns: ISiteDesigns;
     }
 }
 
-Reflect.defineProperty(SPRest.prototype, "siteDesigns", {
+Reflect.defineProperty(SPFI.prototype, "siteDesigns", {
     configurable: true,
     enumerable: true,
-    get: function (this: SPRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return SiteDesigns(baseUrl).configure(options).setRuntime(runtime);
-        });
+    get: function (this: SPFI) {
+        return this.create(SiteDesigns);
     },
 });

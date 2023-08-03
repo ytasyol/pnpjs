@@ -1,195 +1,201 @@
 import { expect } from "chai";
-import { testSettings } from "../main.js";
-
-import { sp } from "@pnp/sp";
+import "@pnp/sp/sites";
 import "@pnp/sp/webs";
 import "@pnp/sp/features";
 
-describe("Features", () => {
+describe("Features", function () {
 
-    if (testSettings.enableWebTests) {
+    before(function () {
 
+        if (!this.pnp.settings.enableWebTests) {
+            this.skip();
+        }
+    });
+
+    describe("Web", function () {
         // Web feature - Following Content
         const webFeatureId = "a7a2793e-67cd-4dc1-9fd0-43f61581207a";
 
+        it("getbyid", function () {
+            return expect(this.pnp.sp.web.features.getById(webFeatureId)());
+        });
+
+        it("add", async function () {
+
+            // Check if feature is already active.
+            const res = await this.pnp.sp.web.features.getById(webFeatureId)();
+
+            if (res["odata.null"]) {
+
+                // Feature not active already
+                return expect(this.pnp.sp.web.features.add(webFeatureId)).to.be.eventually.fulfilled;
+            } else {
+
+                // Feature already active. Call should fail
+                return expect(this.pnp.sp.web.features.add(webFeatureId)).to.be.eventually.rejected;
+            }
+        });
+
+        it("add (force)", function () {
+
+            return expect(this.pnp.sp.web.features.add(webFeatureId, true)).to.be.eventually.fulfilled;
+        });
+
+        it("remove", async function () {
+
+            // Check if feature is active.
+            const res = await this.pnp.sp.web.features.getById(webFeatureId)();
+
+            if (res["odata.null"]) {
+
+                // Feature not active. Call to remove should fail
+                return expect(this.pnp.sp.web.features.remove(webFeatureId)).to.be.eventually.rejected;
+            } else {
+
+                // Feature active.
+                return expect(this.pnp.sp.web.features.remove(webFeatureId)).to.be.eventually.fulfilled;
+            }
+        });
+
+        it("remove (force)", async function () {
+
+            // Check if feature is active.
+            const res = await this.pnp.sp.web.features.getById(webFeatureId)();
+
+            if (res["odata.null"]) {
+
+                // Feature not active. Call to remove should fail
+                return expect(this.pnp.sp.web.features.remove(webFeatureId, true)).to.be.eventually.rejected;
+            } else {
+
+                // Feature active.
+                return expect(this.pnp.sp.web.features.remove(webFeatureId, true)).to.be.eventually.fulfilled;
+            }
+        });
+
+        it("deactivate", async function () {
+
+            // Check if feature is active.
+            const res = await this.pnp.sp.web.features.getById(webFeatureId)();
+
+            if (res["odata.null"]) {
+
+                // Feature not active. Call to deactivate should fail
+                return expect(this.pnp.sp.web.features.remove(webFeatureId, true)).to.be.eventually.rejected;
+            } else {
+
+                // Feature active.
+                return expect(this.pnp.sp.web.features.remove(webFeatureId, true)).to.be.eventually.fulfilled;
+            }
+        });
+
+        it("deactivate (force)", async function () {
+
+            // Check if feature is active.
+            const res = await this.pnp.sp.web.features.getById(webFeatureId)();
+
+            if (res["odata.null"]) {
+
+                // Feature not active. Call to deactivate should fail
+                return expect(this.pnp.sp.web.features.remove(webFeatureId, true)).to.be.eventually.rejected;
+            } else {
+
+                // Feature active.
+                return expect(this.pnp.sp.web.features.remove(webFeatureId, true)).to.be.eventually.fulfilled;
+            }
+        });
+    });
+
+    describe("Site", function () {
         // Site feature - SharePoint Lists and Libraries experience
         const siteFeatureId = "e3540c7d-6bea-403c-a224-1a12eafee4c4";
 
-        it("web.features.getbyid", function () {
-            return expect(sp.web.features.getById(webFeatureId)());
+        it("getbyid", function () {
+            return expect(this.pnp.sp.site.features.getById(siteFeatureId)());
         });
 
-        it("web.features.add", async function () {
+        it("add", async function () {
 
             // Check if feature is already active.
-            const res = await sp.web.features.getById(webFeatureId)();
+            const res = await this.pnp.sp.site.features.getById(siteFeatureId)();
 
             if (res["odata.null"]) {
 
                 // Feature not active already
-                return expect(sp.web.features.add(webFeatureId)).to.be.eventually.fulfilled;
+                return expect(this.pnp.sp.site.features.add(siteFeatureId)).to.be.eventually.fulfilled;
             } else {
 
                 // Feature already active. Call should fail
-                return expect(sp.web.features.add(webFeatureId)).to.be.eventually.rejected;
+                return expect(this.pnp.sp.site.features.add(siteFeatureId)).to.be.eventually.rejected;
             }
         });
 
-        it("web.features.add force", function () {
-
-            return expect(sp.web.features.add(webFeatureId, true)).to.be.eventually.fulfilled;
+        it("add (force)", function () {
+            return expect(this.pnp.sp.site.features.add(siteFeatureId, true)).to.be.eventually.fulfilled;
         });
 
-        it("web.features.remove", async function () {
+        it("remove", async function () {
 
             // Check if feature is active.
-            const res = await sp.web.features.getById(webFeatureId)();
+            const res = await this.pnp.sp.site.features.getById(siteFeatureId)();
 
             if (res["odata.null"]) {
 
                 // Feature not active. Call to remove should fail
-                return expect(sp.web.features.remove(webFeatureId)).to.be.eventually.rejected;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId)).to.be.eventually.rejected;
             } else {
 
                 // Feature active.
-                return expect(sp.web.features.remove(webFeatureId)).to.be.eventually.fulfilled;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId)).to.be.eventually.fulfilled;
             }
         });
 
-        it("web.features.remove force", async function () {
+        it("remove (force)", async function () {
 
             // Check if feature is active.
-            const res = await sp.web.features.getById(webFeatureId)();
+            const res = await this.pnp.sp.site.features.getById(siteFeatureId)();
 
             if (res["odata.null"]) {
 
                 // Feature not active. Call to remove should fail
-                return expect(sp.web.features.remove(webFeatureId, true)).to.be.eventually.rejected;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId, true)).to.be.eventually.rejected;
             } else {
 
                 // Feature active.
-                return expect(sp.web.features.remove(webFeatureId, true)).to.be.eventually.fulfilled;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId, true)).to.be.eventually.fulfilled;
             }
         });
 
-        it("Web Feature.deactivate", async function () {
+        it("deactivate", async function () {
 
             // Check if feature is active.
-            const res = await sp.web.features.getById(webFeatureId)();
+            const res = await this.pnp.sp.site.features.getById(siteFeatureId)();
 
             if (res["odata.null"]) {
 
                 // Feature not active. Call to deactivate should fail
-                return expect(sp.web.features.getById(webFeatureId).deactivate()).to.be.eventually.rejected;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId, true)).to.be.eventually.rejected;
             } else {
 
                 // Feature active.
-                return expect(sp.web.features.getById(webFeatureId).deactivate()).to.be.eventually.fulfilled;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId, true)).to.be.eventually.fulfilled;
             }
         });
 
-        it("Web Feature.deactivate force", async function () {
+        it("deactivate (force)", async function () {
 
             // Check if feature is active.
-            const res = await sp.web.features.getById(webFeatureId)();
+            const res = await this.pnp.sp.site.features.getById(siteFeatureId)();
 
             if (res["odata.null"]) {
 
                 // Feature not active. Call to deactivate should fail
-                return expect(sp.web.features.getById(webFeatureId).deactivate(true)).to.be.eventually.rejected;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId, true)).to.be.eventually.rejected;
             } else {
 
                 // Feature active.
-                return expect(sp.web.features.getById(webFeatureId).deactivate(true)).to.be.eventually.fulfilled;
+                return expect(this.pnp.sp.site.features.remove(siteFeatureId, true)).to.be.eventually.fulfilled;
             }
         });
-
-        it("site.features.getbyid", function () {
-            return expect(sp.site.features.getById(siteFeatureId)());
-        });
-
-        it("site.features.add", async function () {
-
-            // Check if feature is already active.
-            const res = await sp.site.features.getById(siteFeatureId)();
-
-            if (res["odata.null"]) {
-
-                // Feature not active already
-                return expect(sp.site.features.add(siteFeatureId)).to.be.eventually.fulfilled;
-            } else {
-
-                // Feature already active. Call should fail
-                return expect(sp.site.features.add(siteFeatureId)).to.be.eventually.rejected;
-            }
-        });
-
-        it("site.features.add force", function () {
-            return expect(sp.site.features.add(siteFeatureId, true)).to.be.eventually.fulfilled;
-        });
-
-        it("site.features.remove", async function () {
-
-            // Check if feature is active.
-            const res = await sp.site.features.getById(siteFeatureId)();
-
-            if (res["odata.null"]) {
-
-                // Feature not active. Call to remove should fail
-                return expect(sp.site.features.remove(siteFeatureId)).to.be.eventually.rejected;
-            } else {
-
-                // Feature active.
-                return expect(sp.site.features.remove(siteFeatureId)).to.be.eventually.fulfilled;
-            }
-        });
-
-        it("site.features.remove force", async function () {
-
-            // Check if feature is active.
-            const res = await sp.site.features.getById(siteFeatureId)();
-
-            if (res["odata.null"]) {
-
-                // Feature not active. Call to remove should fail
-                return expect(sp.site.features.remove(siteFeatureId, true)).to.be.eventually.rejected;
-            } else {
-
-                // Feature active.
-                return expect(sp.site.features.remove(siteFeatureId, true)).to.be.eventually.fulfilled;
-            }
-        });
-
-        it("Site Feature.deactivate", async function () {
-
-            // Check if feature is active.
-            const res = await sp.site.features.getById(siteFeatureId)();
-
-            if (res["odata.null"]) {
-
-                // Feature not active. Call to deactivate should fail
-                return expect(sp.site.features.getById(siteFeatureId).deactivate()).to.be.eventually.rejected;
-            } else {
-
-                // Feature active.
-                return expect(sp.site.features.getById(siteFeatureId).deactivate()).to.be.eventually.fulfilled;
-            }
-        });
-
-        it("Site Feature.deactivate force", async function () {
-
-            // Check if feature is active.
-            const res = await sp.site.features.getById(webFeatureId)();
-
-            if (res["odata.null"]) {
-
-                // Feature not active. Call to deactivate should fail
-                return expect(sp.site.features.getById(siteFeatureId).deactivate(true)).to.be.eventually.rejected;
-            } else {
-
-                // Feature active.
-                return expect(sp.site.features.getById(siteFeatureId).deactivate(true)).to.be.eventually.fulfilled;
-            }
-        });
-    }
+    });
 });

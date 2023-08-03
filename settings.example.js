@@ -1,9 +1,29 @@
-var settings = {
+const privateKey = `-----BEGIN RSA PRIVATE KEY-----
+{contents of key.pem file}
+-----END RSA PRIVATE KEY-----
+`;
 
+// any of the settings available for msal-node client, passed to the constructor
+// https://github.com/AzureAD/microsoft-authentication-library-for-js/tree/dev/lib/msal-node
+
+// PnP example: https://pnp.github.io/pnpjs/authentication/server-nodejs/#call-sharepoint
+var msalInit = {
+    auth: {
+        authority: "https://login.microsoftonline.com/{tenant Id}/",
+        clientCertificate: {
+            thumbprint: "{Thumbprint from your cert.pem file -- shown in AAD App Registration}",
+            privateKey: privateKey,
+        },
+        clientId: "{AAD Application Id/Client Id}",
+    }
+}
+
+export const settings = {
     testing: {
         enableWebTests: true,
         // AAD login for test user
         testUser: "i:0#.f|membership|user@consto.com",
+        testGroupId:"{ Microsoft 365 Group ID }",
         sp: {
             // legacy client id (optional if using msal)
             id: "{ client id }",
@@ -15,12 +35,7 @@ var settings = {
             notificationUrl: "{ notification url }",
             // for new deployments we recommend the msal settings that can then be applied to both graph and SharePoint
             msal: {
-                init: {
-                    // any of the settings available for msal-node client, passed to the constructor
-                    // https://github.com/AzureAD/microsoft-authentication-library-for-js/tree/dev/lib/msal-node
-
-                    // PnP example: https://pnp.github.io/pnpjs/authentication/server-nodejs/#call-sharepoint
-                },
+                init: msalInit,
                 // set your scopes as needed here
                 scopes: ["https://{tenant}.sharepoint.com/.default"]
             },
@@ -33,17 +48,10 @@ var settings = {
             secret: "{your secret}",
             // for new deployments we recommend the msal settings that can then be applied to both graph and SharePoint
             msal: {
-                init: {
-                    // any of the settings available for msal-node client, passed to the constructor
-                    // https://github.com/AzureAD/microsoft-authentication-library-for-js/tree/dev/lib/msal-node
-
-                    // PnP example: https://pnp.github.io/pnpjs/authentication/server-nodejs/#call-sharepoint
-                },
+                init: msalInit,
                 // set your scopes as needed here
                 scopes: ["https://graph.microsoft.com/.default"]
             },
         },
     }
 }
-
-module.exports = settings;

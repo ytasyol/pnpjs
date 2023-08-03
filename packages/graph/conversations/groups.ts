@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Group } from "../groups/types.js";
 import { Conversations, IConversations, ISenders, Senders } from "./types.js";
 
@@ -16,5 +16,5 @@ declare module "../groups/types" {
 }
 
 addProp(_Group, "conversations", Conversations);
-addProp(_Group, "acceptedSenders", Senders, "acceptedsenders");
-addProp(_Group, "rejectedSenders", Senders, "rejectedsenders");
+addProp(_Group, "acceptedSenders", Senders);
+addProp(_Group, "rejectedSenders", Senders);

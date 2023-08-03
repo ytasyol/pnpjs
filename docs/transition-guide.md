@@ -1,121 +1,87 @@
 # Transition Guide
 
-We have worked to make moving from @pnp library 1.* to 2.* as painless as possible, however there are some changes to how things work. The below guide we have provided an overview of what it takes to transition between the libraries. If we missed something, please let us know in the issues list so we can update the guide. Thanks!
+It is our hope that the transition from version 2.\* to 3.\* will be as painless as possible, however given the transition we have made from a global sp object to an instance based object some architectural and inital setup changes will need to be addressed. In the following sections we endevor to provide an overview of what changes will be required. If we missed something, please let us know in the issues list so we can update the guide. Thanks!
 
-## Installing @pnp libraries
+For a full, detailed list of what's been added, updated, and removed please see our [CHANGELOG](https://github.com/pnp/pnpjs/blob/main/CHANGELOG.md)
 
-In version 1.* the libraries were setup as peer dependencies of each other requiring you to install each of them separately. We continue to believe this correctly describes the relationship, but recognize that basically nothing in the world accounts for peer dependencies. So we have updated the libraries to be dependencies. This makes it easier to install into your projects as you only need to install a single library:
+For a full sample project, utilizing SPFx 1.14 and V3 that showcases some of the more dramatic changes to the library check out this [sample](https://github.com/pnp/sp-dev-fx-webparts/tree/main/samples/react-pnp-js-sample).
 
-`npm i --save @pnp/sp`
+## Benefits and Advancements in V3
 
-## Selective Imports
+For version 2 the core themes were selective imports, a model based on factory functions & interfaces, and improving the docs. This foundation gave us the opportunity to re-write the entire request pipeline internals with minimal external library changes - showing a bit of long-term planning 🙂. With version 3 your required updates are likely to only affect the initial configuration of the library, a huge accomplishment when updating the entire internals.
 
-Another big change in v2 is the ability to selectively import the pieces you need from the libraries. This allows you to have smaller bundles and works well with tree-shaking. It does require you to have more import statements, which can potentially be a bit confusing at first. The selective imports apply to the sp and graph libraries.
+Our request pipeline remained largely unchanged since it was first written ~5 years ago, hard to change something so central to the library. The advantage of this update it is now easy for developers to inject their own logic into the request process. As always, this work was based on feedback over the years and understanding how we can be a better library. The new observer design allows you to customize every aspect of the request, in a much clearer way than was previously possible. In addition this work greatly reduced internal boilerplate code and optimized for library size. We reduced the size of sp & graph libraries by almost 2/3. As well we embraced a fully async design built around the new [Timeline](core/timeline.md). Check out the new model around authoring [observers](core/observers.md) and understand how they relate to [moments](core/moments.md). We feel this new architecture will allow far greater flexibility for consumers of the library to customize the behavior to exactly meet their needs.
 
-To help explain let's take the example of the Web object. In v1 Web includes a reference to pretty much everything else in the entire sp library. Meaning that if you use web (and you pretty much have to) you hold a ref to all the other pieces (like Fields, Lists, ContentTypes) even if you aren't using them. Because of that tree shaking can't do anything to reduce the bundle size because it "thinks" you are using them simply because they have been imported. To solve this in v2 the Web object no longer contains references to anything, it is a bare object with a few methods. If you look at the source you will see that, for example, there is no longer a "lists" property. These properties and methods are now added through selectively importing the functionality you need:
+We also used this as an opportunity to remove duplicate methods, clean up and improve our typings & method signatures, and drop legacy methods. Be sure to review the [changelog](https://github.com/pnp/pnpjs/blob/version-3/CHANGELOG.md). As always we do our best to minimize breaking changes but major versions are breaking versions.
 
-### Selectively Import Web lists functionality
+We thank you for using the library. Your continued feedback drives these improvements, and we look forward to seeing what you build!
 
-```TypeScript
-import { sp } from "@pnp/sp";
-import "@pnp/sp/webs";
-// this imports the functionality for lists associated only with web
-import "@pnp/sp/lists/web";
+## Global vs Instance Architecture
 
-const r = await sp.web.lists();
-```
+The biggest change in version 3 of the library is the movement away from the globally defined sp and graph objects. Starting in version 2.1.0 we added the concept of `Isolated Runtime` which allowed you to create a separate instance of the global object that would have a separate configuration. We found that the implementation was finicky and prone to issues, so we have rebuilt the internals of the library from the ground up to better address this need. In doing so, we decided not to offer a global object at all.
 
-```TypeScript
-import { sp } from "@pnp/sp";
-import "@pnp/sp/webs";
-// this imports all the functionality for lists
-import "@pnp/sp/lists";
+Because of this change, any architecture that relies on the `sp` or `graph` objects being configured during initialization and then reused throughout the solution will need to be rethought. Essentially you have three options:
 
-const r = await sp.web.lists();
-```
+1. Create a new `spfi`/`graphfi` object wherever it's required.
+1. Create a [service architecture](../getting-started/#establish-context-within-an-spfx-service) that can return a previously configured instance or utilize an instance and return the results
+1. Utilize a [Project Preset file](./concepts/project-preset.md).
 
-Each of the docs pages shows the selective import paths for each sub-module (lists, items, etc.).
+In other words, the `sp` and `graph` objects have been deprecated and will need to be replaced.
 
-### Presets
+For more information on getting started with these new setup methods please see the [Getting Started](./getting-started.md) docs for a deeper look into the Queryable interface see [Queryable](./queryable/queryable.md).
 
-In addition to the ability to selectively import functionality you can import presets. This allows you to import an entire set of functionality in a single line. At launch the sp library will support two presets "all" and "core" with the graph library supporting "all". **Using the "all" preset will match the functionality of v1.** This can save you time in transitioning your projects so you can update to selective imports later. For new projects we recommend using the selective imports from day 1.
+## AssignFrom and CopyFrom
 
-To update your V1 projects to V2 you can replace all instances of "@pnp/sp" with "@pnp/sp/presets/all" and things should work as before (though some class names or other things may have changed, please review the change log and the rest of this guide).
+With the new Querable instance architecture we have provided a way to branch from one instance to another. To do this we provide two methods: AssignFrom and CopyFrom. These methods can be helpful when you want to establish a new instance to which you might apply other behaviors but want to reuse the configuration from a source. To learn more about them check out the [Core/Behaviors](./core/behaviors.md) documentation.
 
-```TypeScript
-// V1 way of doing things:
-import {
-    sp,
-    ClientSideWebpart,
-    ClientSideWebpartPropertyTypes,
-} from "@pnp/sp";
+## Dropping ".get()"
 
-// V2 way with selective imports
-import { sp } from "@pnp/sp";
-import { ClientSideWebpart, ClientSideWebpartPropertyTypes } from "@pnp/sp/clientside-pages";
+If you are still using the `queryableInstance.get()` method of queryable you must replace it with a direct invoke call `queryableInstance()`.
 
-// V2 way with preset "all"
-import { sp, ClientSideWebpart, ClientSideWebpartPropertyTypes } from "@pnp/sp/presets/all";
-```
+## Batching
 
-## Invokable Objects
+Another benefit of the new updated internals is a significantly streamlined and simplified process for batching requests. Essentially, the interface for SP and Graph now function the same.
 
-Another new feature is the addition of invokable objects. Previously where you used "get()" to invoke a request you can now leave it off. We have left the .get method in place so everyone's code wasn't broken immediately upon transitioning.
+A new module called "batching" will need to be imported which then provides the batched interface which will return a tuple with a new Querable instance and an execute function. To see more details check out [Batching](./concepts/batching.md).
+
+## Web -> SPFI
+
+In V2, to connect to a different web you would use the function
 
 ```TypeScript
-import { sp } from "@pnp/sp";
-import "@pnp/sp/webs";
-
-// old way (still works)
-const r1 = sp.web.get();
-
-// invokable
-const r2 = sp.web();
+const web = Web({Other Web URL});
 ```
 
-The benefit is that objects can now support default actions that are not "get" but might be "post". And you save typing a few extra characters. This still work the same as with select or any of the other odata methods:
+In V3 you would create a new instance of queryable connecting to the web of your choice. This new method provides you significantly more flexibility by not only allowing you to easily connect to other webs in the same tenant but also to webs in other tenants.
+
+We are seeing a significant number of people report an error when using this method:
+
+`No observers registered for this request.`
+
+which results when it hasn't been updated to use the version 3 convention. Please see the examples below to pick the one that most suits your codebase.
 
 ```TypeScript
-import { sp } from "@pnp/sp";
-import "@pnp/sp/webs";
+import { spfi, SPFx } from "@pnp/sp";
+import { Web } from "@pnp/sp/webs";
 
-// invokable
-const r = sp.web.select("Title", "Url")();
+const spWebA = spfi().using(SPFx(this.context));
+
+// Easiest transition is to use the tuple pattern and the Web constructor which will copy all the observers from the object but set the url to the one provided
+const spWebE = Web([spWebA.web, "{Absolute URL of Other Web}"]);
+
+// Create a new instance of Queryable
+const spWebB = spfi("{Other Web URL}").using(SPFx(this.context));
+
+// Copy/Assign a new instance of Queryable using the existing
+const spWebC = spfi("{Other Web URL}").using(AssignFrom(sp.web));
+
+// Create a new instance of Queryable using other credentials?
+const spWebD = spfi("{Other Web URL}").using(SPFx(this.context));
+
 ```
 
-## Factory Functions & Interfaces
+Please see the documentation for more information on the updated [Web constructor](./sp/webs.md).
 
-Another change in the library is in the structure of exports. We are no longer exporting the objects themselves, rather we are only exposing factory functions and interfaces. This allows us to decouple what developers use from our internal implementation. For folks using the fluent chain starting with sp you shouldn't need to update your code. If you are using any of the v1 classes directly you should just need to remove the "new" keyword and update the import path. The factory functions signature matches the constructor signature of the v1 objects.
+## Dropping -Commonjs Packages
 
-```TypeScript
-// v1
-import { Web } from "@pnp/sp";
-
-const web: Web = new Web("some absolute url");
-
-const r1 = web.get();
-
-// v2
-import { Web, IWeb } from "@pnp/sp/webs";
-
-const web: IWeb = Web("some absolute url");
-
-const r2 = web();
-```
-
-## Extension Methods
-
-Another new capability in v2 is the ability to extend objects and factories. This allows you to easily add methods or properties on a per-object basis. Please see the [full article on extension methods](odata/extensions.md) describing this great new capability.
-
-## CDN publishing
-
-Starting with v2 we will no longer create bundles for each of the packages. Historically these are not commonly used, don't work perfectly for everyone (there are a lot of ways to bundle things), and another piece we need to maintain. Instead we encourage folks to create their [own bundles](concepts/custom-bundle.md), optimized for their particular scenario. This will result in smaller overall bundle size and allow folks to bundle things to match their scenario. Please [review the article on creating your custom bundles](concepts/custom-bundle.md) to see how to tailor bundles to your needs.
-
-The PnPjs bundle will remain, though it is designed only for backwards compatibility and we strongly recommend creating your own bundles, or directly importing the libraries into your projects using selective imports.
-
-## Drop client-svc and sp-taxonomy libraries
-
-These libraries were created to allow folks to access and manage SharePoint taxonomy and manage metadata. Given that there is upcoming support for taxonomy via a supported REST API we will drop these two libraries. If working with taxonomy remains a core requirement of your application and we do not yet have support for the new apis, please remain on v1 for the time being.
-
-> As of 2.0.6 we support reading the modern taxonomy API. [Docs here](./sp/taxonomy.md)
-
+Starting with v3 we are dropping the commonjs versions of all packages. Previously we released these as we worked to transition to esm and the current node didn't yet support esm. With esm now a supported module type, and having done the work to ensure they work in node we feel it is a good time to drop the -commonjs variants. Please see documentation on [Getting started with NodeJS Project using TypeScript producing CommonJS modules](getting-started.md#node-project-using-typescript-producing-commonjs-modules)

@@ -1,21 +1,20 @@
 import {
-    _SharePointQueryableInstance,
-    _SharePointQueryableCollection,
-    ISharePointQueryableInstance,
-    _SharePointQueryable,
-    ISharePointQueryable,
+    _SPQueryable,
+    ISPQueryable,
+    SPQueryable,
+    _SPCollection,
+    _SPInstance,
     spInvokableFactory,
-    SharePointQueryable,
-    SharePointQueryableInstance,
-} from "../sharepointqueryable.js";
-import { body } from "@pnp/odata";
+    SPInstance,
+    ISPInstance,
+} from "../spqueryable.js";
+import { body } from "@pnp/queryable";
 import { spPost } from "../operations.js";
-import { tag } from "../telemetry.js";
 
-export class _LimitedWebPartManager extends _SharePointQueryable implements ILimitedWebPartManager {
+export class _LimitedWebPartManager extends _SPQueryable implements ILimitedWebPartManager {
 
-    public get scope(): ISharePointQueryable {
-        return tag.configure(SharePointQueryable(this, "Scope"), "f.scope");
+    public get scope(): ISPQueryable {
+        return SPQueryable(this, "Scope");
     }
 
     public get webparts(): IWebPartDefinitions {
@@ -23,11 +22,11 @@ export class _LimitedWebPartManager extends _SharePointQueryable implements ILim
     }
 
     public export(id: string): Promise<string> {
-        return spPost(this.clone(LimitedWebPartManagerCloneFactory, "ExportWebPart"), body({ webPartId: id }));
+        return spPost(LimitedWebPartManagerCloneFactory(this, "ExportWebPart"), body({ webPartId: id }));
     }
 
     public import(xml: string): Promise<any> {
-        return spPost(this.clone(LimitedWebPartManagerCloneFactory, "ImportWebPart"), body({ webPartXml: xml }));
+        return spPost(LimitedWebPartManagerCloneFactory(this, "ImportWebPart"), body({ webPartXml: xml }));
     }
 }
 
@@ -36,7 +35,7 @@ export interface ILimitedWebPartManager {
     /**
      * Gets the scope of this web part manager (User = 0 or Shared = 1)
      */
-    readonly scope: ISharePointQueryable;
+    readonly scope: ISPQueryable;
 
     /**
      * Gets the set of web part definitions contained by this web part manager
@@ -58,12 +57,12 @@ export interface ILimitedWebPartManager {
     import(xml: string): Promise<any>;
 }
 
-export const LimitedWebPartManager = (baseUrl: string | ISharePointQueryable, path?: string): ILimitedWebPartManager => new _LimitedWebPartManager(baseUrl, path);
+export const LimitedWebPartManager = (baseUrl: string | ISPQueryable, path?: string): ILimitedWebPartManager => new _LimitedWebPartManager(baseUrl, path);
 
-type LimitedWebPartManagerCloneType = ILimitedWebPartManager & ISharePointQueryable;
-const LimitedWebPartManagerCloneFactory = (baseUrl: string | ISharePointQueryable, path?: string): LimitedWebPartManagerCloneType => <any>LimitedWebPartManager(baseUrl, path);
+type LimitedWebPartManagerCloneType = ILimitedWebPartManager & ISPQueryable;
+const LimitedWebPartManagerCloneFactory = (baseUrl: string | ISPQueryable, path?: string): LimitedWebPartManagerCloneType => <any>LimitedWebPartManager(baseUrl, path);
 
-export class _WebPartDefinitions extends _SharePointQueryableCollection {
+export class _WebPartDefinitions extends _SPCollection {
 
     /**
      * Gets a web part definition from the collection by id
@@ -86,20 +85,20 @@ export class _WebPartDefinitions extends _SharePointQueryableCollection {
 export interface IWebPartDefinitions extends _WebPartDefinitions {}
 export const WebPartDefinitions = spInvokableFactory<IWebPartDefinitions>(_WebPartDefinitions);
 
-export class _WebPartDefinition extends _SharePointQueryableInstance {
+export class _WebPartDefinition extends _SPInstance {
 
     /**
     * Gets the webpart information associated with this definition
     */
-    public get webpart(): ISharePointQueryableInstance {
-        return SharePointQueryableInstance(this, "webpart");
+    public get webpart(): ISPInstance {
+        return SPInstance(this, "webpart");
     }
 
     /**
      * Saves changes to the Web Part made using other properties and methods on the SPWebPartDefinition object
      */
     public saveChanges(): Promise<any> {
-        return spPost(this.clone(WebPartDefinition, "SaveWebPartChanges"));
+        return spPost(WebPartDefinition(this, "SaveWebPartChanges"));
     }
 
     /**
@@ -109,28 +108,28 @@ export class _WebPartDefinition extends _SharePointQueryableInstance {
      * @param zoneIndex A Web Part zone index that specifies the position at which the Web Part is to be moved within the destination Web Part zone
      */
     public moveTo(zoneId: string, zoneIndex: number): Promise<void> {
-        return spPost(this.clone(WebPartDefinition, `MoveWebPartTo(zoneID='${zoneId}', zoneIndex=${zoneIndex})`));
+        return spPost(WebPartDefinition(this, `MoveWebPartTo(zoneID='${zoneId}', zoneIndex=${zoneIndex})`));
     }
 
     /**
      * Closes the Web Part. If the Web Part is already closed, this method does nothing
      */
     public close(): Promise<void> {
-        return spPost(this.clone(WebPartDefinition, "CloseWebPart"));
+        return spPost(WebPartDefinition(this, "CloseWebPart"));
     }
 
     /**
      * Opens the Web Part. If the Web Part is already closed, this method does nothing
      */
     public open(): Promise<void> {
-        return spPost(this.clone(WebPartDefinition, "OpenWebPart"));
+        return spPost(WebPartDefinition(this, "OpenWebPart"));
     }
 
     /**
      * Removes a webpart from a page, all settings will be lost
      */
     public delete(): Promise<void> {
-        return spPost(this.clone(WebPartDefinition, "DeleteWebPart"));
+        return spPost(WebPartDefinition(this, "DeleteWebPart"));
     }
 }
 export interface IWebPartDefinition extends _WebPartDefinition {}

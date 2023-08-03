@@ -1,19 +1,18 @@
-import { invokableFactory, body, headers, IQueryable } from "@pnp/odata";
-import { ITypedHash, assign, getGUID, hOP, stringIsNullOrEmpty, objectDefinedNotNull, combine, isUrlAbsolute, isArray } from "@pnp/common";
+import { body, headers } from "@pnp/queryable";
+import { getGUID, hOP, stringIsNullOrEmpty, objectDefinedNotNull, combine, isUrlAbsolute, isArray } from "@pnp/core";
 import { IFile, IFileInfo } from "../files/types.js";
 import { Item, IItem } from "../items/types.js";
-import { SharePointQueryable, _SharePointQueryable, ISharePointQueryable, SharePointQueryableCollection } from "../sharepointqueryable.js";
-import { metadata } from "../utils/metadata.js";
+import { _SPQueryable, SPQueryable, SPCollection, SPInit } from "../spqueryable.js";
 import { List } from "../lists/types.js";
-import { odataUrlFrom } from "../odata.js";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
 import { Web, IWeb } from "../webs/types.js";
-import { extractWebUrl } from "../utils/extractweburl.js";
+import { extractWebUrl } from "../utils/extract-web-url.js";
 import { Site } from "../sites/types.js";
 import { spPost } from "../operations.js";
 import { getNextOrder, reindex } from "./funcs.js";
 import "../files/web.js";
 import "../comments/item.js";
-import { tag } from "../telemetry.js";
+import { createBatch } from "../batching.js";
 
 /**
  * Page promotion state
@@ -43,14 +42,10 @@ export type ClientsidePageLayoutType = "Article" | "Home" | "SingleWebPartAppPag
  */
 export type CanvasColumnFactor = 0 | 2 | 4 | 6 | 8 | 12;
 
-function initFrom(o: ISharePointQueryable, url: string): IClientsidePage {
-    return ClientsidePage(extractWebUrl(o.toUrl()), url).configureFrom(o);
-}
-
 /**
  * Represents the data and methods associated with client side "modern" pages
  */
-export class _ClientsidePage extends _SharePointQueryable {
+export class _ClientsidePage extends _SPQueryable {
 
     private _pageSettings: IClientsidePageSettingsSlice;
     private _layoutPart: ILayoutPartsContent;
@@ -61,25 +56,24 @@ export class _ClientsidePage extends _SharePointQueryable {
      * PLEASE DON'T USE THIS CONSTRUCTOR DIRECTLY, thank you 🐇
      */
     constructor(
-        baseUrl: string | ISharePointQueryable,
+        base: SPInit,
         path?: string,
         protected json?: Partial<IPageData>,
         noInit = false,
         public sections: CanvasSection[] = [],
         public commentsDisabled = false) {
 
-        super(baseUrl, path);
+        super(base, path);
 
         this._bannerImageDirty = false;
         this._bannerImageThumbnailUrlDirty = false;
+        this.parentUrl = "";
 
-        // ensure we have a good url to build on for the pages api
-        if (typeof baseUrl === "string") {
-            this.data.parentUrl = "";
-            this.data.url = combine(extractWebUrl(baseUrl), path);
-        } else {
-            this.assign(initFrom(baseUrl, null), path);
-        }
+        // we need to rebase the url to always be the web url plus the path
+        // Queryable handles the correct parsing of the SPInit, and we pull
+        // the weburl and combine with the supplied path, which is unique
+        // to how ClientsitePages works. This class is a special case.
+        this._url = combine(extractWebUrl(this._url), path);
 
         // set a default page settings slice
         this._pageSettings = { controlType: 0, pageSettingsSlice: { isDefaultDescription: true, isDefaultThumbnail: true } };
@@ -107,6 +101,7 @@ export class _ClientsidePage extends _SharePointQueryable {
                 textAlignment: "Left",
                 title: "",
                 topicHeader: "",
+                enableGradientEffect: true,
             },
             reservedHeight: 280,
             serverProcessedContent: { htmlStrings: {}, searchablePlainTexts: {}, imageSources: {}, links: {} },
@@ -153,7 +148,7 @@ export class _ClientsidePage extends _SharePointQueryable {
     }
 
     public get title(): string {
-        return this._layoutPart.properties.title;
+        return this.json.Title;
     }
 
     public set title(value: string) {
@@ -226,8 +221,8 @@ export class _ClientsidePage extends _SharePointQueryable {
     }
 
     public get authorByLine(): string | null {
-        if (isArray(this.json.AuthorByline) && this.json.AuthorByline.length > 0) {
-            return this.json.AuthorByline[0];
+        if (isArray(this._layoutPart.properties.authorByline) && this._layoutPart.properties.authorByline.length > 0) {
+            return this._layoutPart.properties.authorByline[0];
         }
 
         return null;
@@ -289,11 +284,10 @@ export class _ClientsidePage extends _SharePointQueryable {
     /**
      * Loads this page's content from the server
      */
-    @tag("csp.load")
     public async load(): Promise<IClientsidePage> {
 
         const item = await this.getItem<{ Id: number; CommentsDisabled: boolean }>("Id", "CommentsDisabled");
-        const pageData = await SharePointQueryable(this, `_api/sitepages/pages(${item.Id})`)<IPageData>();
+        const pageData = await SPQueryable(this, `_api/sitepages/pages(${item.Id})`)<IPageData>();
         this.commentsDisabled = item.CommentsDisabled;
         return this.fromJSON(pageData);
     }
@@ -303,34 +297,39 @@ export class _ClientsidePage extends _SharePointQueryable {
      *
      * @param publish If true the page is published, if false the changes are persisted to SharePoint but not published [Default: true]
      */
-    @tag("csp.save")
     public async save(publish = true): Promise<boolean> {
 
         if (this.json.Id === null) {
             throw Error("The id for this page is null. If you want to create a new page, please use ClientSidePage.Create");
         }
 
-        if (this._bannerImageDirty) {
+        const previewPartialUrl = "_layouts/15/getpreview.ashx";
+
+        // If new banner image, and banner image url is not in getpreview.ashx format
+        if (this._bannerImageDirty && !this.bannerImageUrl.includes(previewPartialUrl)) {
 
             const serverRelativePath = this.bannerImageUrl;
 
             let imgInfo: Pick<IFileInfo, "ListId" | "WebId" | "UniqueId" | "Name" | "SiteId">;
             let webUrl: string;
 
-            const web = Web(extractWebUrl(this.toUrl()));
-            const batch = web.createBatch();
+            const web = Web(this);
+
+            const [batch, execute] = createBatch(web);
+            web.using(batch);
+
             web.getFileByServerRelativePath(serverRelativePath.replace(/%20/ig, " "))
-                .select("ListId", "WebId", "UniqueId", "Name", "SiteId").inBatch(batch)().then(r1 => imgInfo = r1);
-            web.select("Url").inBatch(batch)().then(r2 => webUrl = r2.Url);
+                .select("ListId", "WebId", "UniqueId", "Name", "SiteId")().then(r1 => imgInfo = r1);
+            web.select("Url")().then(r2 => webUrl = r2.Url);
 
             // we know the .then calls above will run before execute resolves, ensuring the vars are set
-            await batch.execute();
+            await execute();
 
-            const f = SharePointQueryable(webUrl, "_layouts/15/getpreview.ashx");
+            const f = SPQueryable(webUrl, previewPartialUrl);
             f.query.set("guidSite", `${imgInfo.SiteId}`);
             f.query.set("guidWeb", `${imgInfo.WebId}`);
             f.query.set("guidFile", `${imgInfo.UniqueId}`);
-            this.bannerImageUrl = f.toUrlAndQuery();
+            this.bannerImageUrl = f.toRequestUrl();
 
             if (!objectDefinedNotNull(this._layoutPart.serverProcessedContent)) {
                 this._layoutPart.serverProcessedContent = <any>{};
@@ -356,35 +355,37 @@ export class _ClientsidePage extends _SharePointQueryable {
 
         // we try and check out the page for the user
         if (!this.json.IsPageCheckedOutToCurrentUser) {
-            await spPost(initFrom(this, `_api/sitepages/pages(${this.json.Id})/checkoutpage`));
+            await spPost(ClientsidePage(this, `_api/sitepages/pages(${this.json.Id})/checkoutpage`));
         }
 
         // create the body for the save request
-        let saveBody = Object.assign(metadata("SP.Publishing.SitePage"), {
+        let saveBody = {
             AuthorByline: this.json.AuthorByline || [],
             CanvasContent1: this.getCanvasContent1(),
             Description: this.description,
             LayoutWebpartsContent: this.getLayoutWebpartsContent(),
             Title: this.title,
             TopicHeader: this.topicHeader,
-        });
+            BannerImageUrl: this.bannerImageUrl,
+        };
 
         if (this._bannerImageDirty || this._bannerImageThumbnailUrlDirty) {
 
             const bannerImageUrlValue = this._bannerImageThumbnailUrlDirty ? this.thumbnailUrl : this.bannerImageUrl;
 
-            saveBody = assign(saveBody, {
+            saveBody = <any>{
                 BannerImageUrl: bannerImageUrlValue,
-            });
+                ...saveBody,
+            };
         }
 
-        const updater = initFrom(this, `_api/sitepages/pages(${this.json.Id})/savepage`);
+        const updater = ClientsidePage(this, `_api/sitepages/pages(${this.json.Id})/savepage`);
         await spPost<boolean>(updater, headers({ "if-match": "*" }, body(saveBody)));
 
         let r = true;
 
         if (publish) {
-            r = await spPost(initFrom(this, `_api/sitepages/pages(${this.json.Id})/publish`));
+            r = await spPost(ClientsidePage(this, `_api/sitepages/pages(${this.json.Id})/publish`));
             if (r) {
                 this.json.IsPageCheckedOutToCurrentUser = false;
             }
@@ -393,20 +394,22 @@ export class _ClientsidePage extends _SharePointQueryable {
         this._bannerImageDirty = false;
         this._bannerImageThumbnailUrlDirty = false;
 
+        // we need to ensure we reload from the latest data to ensure all urls are updated and current in the object (expecially for new pages)
+        await this.load();
+
         return r;
     }
 
     /**
      * Discards the checkout of this page
      */
-    @tag("csp.discardPageCheckout")
     public async discardPageCheckout(): Promise<void> {
 
         if (this.json.Id === null) {
             throw Error("The id for this page is null. If you want to create a new page, please use ClientSidePage.Create");
         }
 
-        const d = await spPost(initFrom(this, `_api/sitepages/pages(${this.json.Id})/discardPage`), body(metadata("SP.Publishing.SitePage")));
+        const d = await spPost(ClientsidePage(this, `_api/sitepages/pages(${this.json.Id})/discardPage`));
 
         this.fromJSON(d);
     }
@@ -414,7 +417,6 @@ export class _ClientsidePage extends _SharePointQueryable {
     /**
      * Promotes this page as a news item
      */
-    @tag("csp.promoteToNews")
     public async promoteToNews(): Promise<boolean> {
         return this.promoteNewsImpl("promoteToNews");
     }
@@ -465,7 +467,6 @@ export class _ClientsidePage extends _SharePointQueryable {
      * @param title The title of the new page
      * @param publish If true the page will be published (Default: true)
      */
-    @tag("csp.copy")
     public async copy(web: IWeb, pageName: string, title: string, publish = true, promotedState?: PromotedState): Promise<IClientsidePage> {
 
         const page = await CreateClientsidePage(web, pageName, title, this.pageLayout, promotedState);
@@ -478,12 +479,42 @@ export class _ClientsidePage extends _SharePointQueryable {
      * @param page Page whose content we replace with this page's content
      * @param publish If true the page will be published after the copy, if false it will be saved but left unpublished (Default: true)
      */
-    @tag("csp.copyTo")
     public async copyTo(page: IClientsidePage, publish = true): Promise<IClientsidePage> {
-
 
         // we know the method is on the class - but it is protected so not part of the interface
         (<any>page).setControls(this.getControls());
+
+        // copy page properties
+        if (this._layoutPart.properties) {
+
+            if (hOP(this._layoutPart.properties, "topicHeader")) {
+                page.topicHeader = this._layoutPart.properties.topicHeader;
+            }
+
+            if (hOP(this._layoutPart.properties, "imageSourceType")) {
+                page._layoutPart.properties.imageSourceType = this._layoutPart.properties.imageSourceType;
+            }
+
+            if (hOP(this._layoutPart.properties, "layoutType")) {
+                page._layoutPart.properties.layoutType = this._layoutPart.properties.layoutType;
+            }
+
+            if (hOP(this._layoutPart.properties, "textAlignment")) {
+                page._layoutPart.properties.textAlignment = this._layoutPart.properties.textAlignment;
+            }
+
+            if (hOP(this._layoutPart.properties, "showTopicHeader")) {
+                page._layoutPart.properties.showTopicHeader = this._layoutPart.properties.showTopicHeader;
+            }
+
+            if (hOP(this._layoutPart.properties, "showPublishDate")) {
+                page._layoutPart.properties.showPublishDate = this._layoutPart.properties.showPublishDate;
+            }
+
+            if (hOP(this._layoutPart.properties, "enableGradientEffect")) {
+                page._layoutPart.properties.enableGradientEffect = this._layoutPart.properties.enableGradientEffect;
+            }
+        }
 
         // we need to do some work to set the banner image url in the copied page
         if (!stringIsNullOrEmpty(this.json.BannerImageUrl)) {
@@ -501,7 +532,7 @@ export class _ClientsidePage extends _SharePointQueryable {
                 const guidWeb = makeGuid(url.searchParams.get("guidWeb"));
                 const guidFile = makeGuid(url.searchParams.get("guidFile"));
 
-                const site = Site(extractWebUrl(this.toUrl()));
+                const site = Site(this);
                 const id = await site.select("Id")<{ Id: string }>();
                 // the site guid must match the current site's guid or we are unable to set the image
                 if (id.Id === guidSite) {
@@ -557,6 +588,8 @@ export class _ClientsidePage extends _SharePointQueryable {
         }
 
         this.json.BannerImageUrl = url;
+        // update serverProcessedContent (page behavior change 2021-Oct-13)
+        this._layoutPart.serverProcessedContent = { imageSources: { imageSource: url } };
         this._bannerImageDirty = true;
         /*
             setting the banner image resets the thumbnail image (matching UI functionality)
@@ -605,10 +638,10 @@ export class _ClientsidePage extends _SharePointQueryable {
         // get the filename we will use
         const filename = fileUrl.pathname.split(/[\\/]/i).pop();
 
-        const request = initFrom(this, "_api/sitepages/AddImageFromExternalUrl");
-        request.query.set("imageFileName", `'${encodeURIComponent(filename)}'`);
-        request.query.set("pageName", `'${encodeURIComponent(pageName)}'`);
-        request.query.set("externalUrl", `'${encodeURIComponent(url)}'`);
+        const request = ClientsidePage(this, "_api/sitepages/AddImageFromExternalUrl");
+        request.query.set("imageFileName", `'${filename}'`);
+        request.query.set("pageName", `'${pageName}'`);
+        request.query.set("externalUrl", `'${url}'`);
         request.select("ServerRelativeUrl");
 
         const result = await spPost<Pick<IFileInfo, "ServerRelativeUrl">>(request);
@@ -623,8 +656,7 @@ export class _ClientsidePage extends _SharePointQueryable {
      */
     public async setAuthorById(authorId: number): Promise<void> {
 
-        const userLoginData = await SharePointQueryableCollection(extractWebUrl(this.toUrl()), "/_api/web/siteusers")
-            .configureFrom(this)
+        const userLoginData = await SPCollection([this, extractWebUrl(this.toUrl())], "/_api/web/siteusers")
             .filter(`Id eq ${authorId}`)
             .select("LoginName")<{ LoginName: string }[]>();
 
@@ -642,8 +674,7 @@ export class _ClientsidePage extends _SharePointQueryable {
      */
     public async setAuthorByLoginName(authorLoginName: string): Promise<void> {
 
-        const userLoginData = await SharePointQueryableCollection(extractWebUrl(this.toUrl()), "/_api/web/siteusers")
-            .configureFrom(this)
+        const userLoginData = await SPCollection([this, extractWebUrl(this.toUrl())], "/_api/web/siteusers")
             .filter(`LoginName eq '${authorLoginName}'`)
             .select("UserPrincipalName", "Title")<{ UserPrincipalName: string; Title: string }[]>();
 
@@ -651,8 +682,8 @@ export class _ClientsidePage extends _SharePointQueryable {
             throw Error(`Could not find user with login name '${authorLoginName}'.`);
         }
 
-        this.json.AuthorByline = [authorLoginName];
-        this._layoutPart.properties.authorByline = [authorLoginName];
+        this.json.AuthorByline = [userLoginData[0].UserPrincipalName];
+        this._layoutPart.properties.authorByline = [userLoginData[0].UserPrincipalName];
         this._layoutPart.properties.authors = [{
             id: authorLoginName,
             name: userLoginData[0].Title,
@@ -666,26 +697,69 @@ export class _ClientsidePage extends _SharePointQueryable {
      *
      * @param selects Specific set of fields to include when getting the item
      */
-    @tag("csp.getItem")
     public async getItem<T>(...selects: string[]): Promise<IItem & T> {
-
-        const initer = initFrom(this, "/_api/lists/EnsureClientRenderedSitePagesLibrary").select("EnableModeration", "EnableMinorVersions", "Id");
+        const initer = ClientsidePage(this, "/_api/lists/EnsureClientRenderedSitePagesLibrary").select("EnableModeration", "EnableMinorVersions", "Id");
         const listData = await spPost<{ Id: string; "odata.id": string }>(initer);
-        const item = (List(listData["odata.id"])).configureFrom(this).items.getById(this.json.Id);
+        const item = List([this, listData["odata.id"]]).items.getById(this.json.Id);
         const itemData: T = await item.select(...selects)();
-        return assign((Item(odataUrlFrom(itemData))).configureFrom(this), itemData);
+        return Object.assign(Item([this, odataUrlFrom(itemData)]), itemData);
     }
 
     /**
-     * Extends this queryable from the provided parent
-     *
-     * @param parent Parent queryable from which we will derive a base url
-     * @param path Additional path
+         * Recycle this page
+         */
+    public async recycle(): Promise<void> {
+        const item = await this.getItem();
+        await item.recycle();
+    }
+
+    /**
+     * Delete this page
      */
-    protected assign(parent: IQueryable<any>, path?: string) {
-        this.data.parentUrl = parent.data.url;
-        this.data.url = combine(this.data.parentUrl, path || "");
-        this.configureFrom(parent);
+    public async delete(): Promise<void> {
+        const item = await this.getItem();
+        await item.delete();
+    }
+
+    /**
+     * Schedules a page for publishing
+     *
+     * @param publishDate Date to publish the item
+     * @returns Version which was scheduled to be published
+     */
+    public async schedulePublish(publishDate: Date): Promise<string> {
+        return spPost(ClientsidePage(this, `_api/sitepages/pages(${this.json.Id})/SchedulePublish`), body({
+            sitePage: { PublishStartDate: publishDate },
+        }));
+    }
+
+    /**
+     * Saves a copy of this page as a template in this library's Templates folder
+     *
+     * @param publish If true the template is published, false the template is not published (default: true)
+     * @returns IClientsidePage instance representing the new template page
+     */
+    public async saveAsTemplate(publish = true): Promise<IClientsidePage> {
+        const data = await spPost(ClientsidePage(this, `_api/sitepages/pages(${this.json.Id})/SavePageAsTemplate`));
+        const page = ClientsidePage(this, null, data);
+        page.title = this.title;
+        await page.save(publish);
+        return page;
+    }
+
+    /**
+     * Share this Page's Preview content by Email
+     *
+     * @param emails Set of emails to which the preview is shared
+     * @param message The message to include
+     * @returns void
+     */
+    public share(emails: string[], message: string): Promise<void> {
+        return spPost(ClientsidePage(this, "_api/SP.Publishing.RichSharing/SharePageByEmail"), body({
+            recipientEmails: emails,
+            message,
+            url: this.json.AbsoluteUrl,
+        }));
     }
 
     protected getCanvasContent1(): string {
@@ -761,7 +835,7 @@ export class _ClientsidePage extends _SharePointQueryable {
                 } else {
                     column.controls.forEach(control => {
                         control.data.emphasis = this.getEmphasisObj(section.emphasis);
-                        canvasData.push(control.data);
+                        canvasData.push(this.specialSaveHandling(control).data);
                     });
                 }
             });
@@ -797,7 +871,7 @@ export class _ClientsidePage extends _SharePointQueryable {
             }
         }
 
-        return await spPost(initFrom(this, `_api/sitepages/pages(${this.json.Id})/${method}`), body(metadata("SP.Publishing.SitePage")));
+        return spPost(ClientsidePage(this, `_api/sitepages/pages(${this.json.Id})/${method}`));
     }
 
     /**
@@ -880,6 +954,31 @@ export class _ClientsidePage extends _SharePointQueryable {
 
         return section;
     }
+
+    /**
+     * Based on issue #1690 we need to take special case actions to ensure some things
+     * can be saved properly without breaking existing pages.
+     *
+     * @param control The control we are ensuring is "ready" to be saved
+     */
+    private specialSaveHandling(control: ColumnControl<any>): ColumnControl<any> {
+
+        // this is to handle the special case in issue #1690
+        // must ensure that searchablePlainTexts values have < replaced with &lt; in links web part
+        // For #2561 need to process for code snippet webpart and any control && (<any>control).data.webPartId === "c70391ea-0b10-4ee9-b2b4-006d3fcad0cd"
+        if ((<any>control).data.controlType === 3) {
+            const texts = (<any>control).data?.webPartData?.serverProcessedContent?.searchablePlainTexts || null;
+            if (objectDefinedNotNull(texts)) {
+                const keys = Object.getOwnPropertyNames(texts);
+                for (let i = 0; i < keys.length; i++) {
+                    texts[keys[i]] = texts[keys[i]].replace(/</ig, "&lt;");
+                    (<any>control).data.webPartData.serverProcessedContent.searchablePlainTexts = texts;
+                }
+            }
+        }
+
+        return control;
+    }
 }
 export interface IClientsidePage extends _ClientsidePage { }
 
@@ -887,14 +986,14 @@ export interface IClientsidePage extends _ClientsidePage { }
  * Invokable factory for IClientSidePage instances
  */
 const ClientsidePage = (
-    baseUrl: string | ISharePointQueryable,
+    base: SPInit,
     path?: string,
     json?: Partial<IPageData>,
     noInit = false,
     sections: CanvasSection[] = [],
     commentsDisabled = false): IClientsidePage => {
 
-    return invokableFactory<IClientsidePage>(_ClientsidePage)(baseUrl, path, json, noInit, sections, commentsDisabled);
+    return new _ClientsidePage(base, path, json, noInit, sections, commentsDisabled);
 };
 
 /**
@@ -905,8 +1004,8 @@ const ClientsidePage = (
 export const ClientsidePageFromFile = async (file: IFile): Promise<IClientsidePage> => {
 
     const item = await file.getItem<{ Id: number }>();
-    const page = ClientsidePage(extractWebUrl(file.toUrl()), "", { Id: item.Id }, true);
-    return page.configureFrom(file).load();
+    const page = ClientsidePage([file, extractWebUrl(file.toUrl())], "", { Id: item.Id }, true);
+    return page.load();
 };
 
 /**
@@ -925,10 +1024,10 @@ export const CreateClientsidePage =
         pageName = pageName.replace(/\.aspx$/i, "");
 
         // initialize the page, at this point a checked-out page with a junk filename will be created.
-        const pageInitData: IPageData = await spPost(initFrom(web, "_api/sitepages/pages"), body(Object.assign(metadata("SP.Publishing.SitePage"), {
+        const pageInitData: IPageData = await spPost(ClientsidePage(web, "_api/sitepages/pages"), body({
             PageLayoutType,
             PromotedState: promotedState,
-        })));
+        }));
 
         // now we can init our page with the save data
         const newPage = ClientsidePage(web, "", pageInitData);
@@ -1273,12 +1372,27 @@ export class ClientsideWebpart extends ColumnControl<IClientsideWebPartData> {
     }
 
     public setProperties<T = any>(properties: T): this {
-        this.data.webPartData.properties = assign(this.data.webPartData.properties, properties);
+        this.data.webPartData.properties = {
+            ...this.data.webPartData.properties,
+            ...properties,
+        };
         return this;
     }
 
     public getProperties<T = any>(): T {
         return <T>this.data.webPartData.properties;
+    }
+
+    public setServerProcessedContent<T = any>(properties: T): this {
+        this.data.webPartData.serverProcessedContent = {
+            ...this.data.webPartData.serverProcessedContent,
+            ...properties,
+        };
+        return this;
+    }
+
+    public getServerProcessedContent<T = any>(): T {
+        return <T>this.data.webPartData.serverProcessedContent;
     }
 
     protected onColumnChange(col: CanvasColumn): void {
@@ -1395,7 +1509,7 @@ interface IClientSidePageComponentManifest {
         groupId: string;
         iconImageUrl: string;
         officeFabricIconFontName: string;
-        properties: ITypedHash<any>;
+        properties: Record<string, any>;
         title: { default: string };
 
     }[];
@@ -1461,10 +1575,10 @@ export interface IClientsideWebPartData<PropertiesType = any> extends ICanvasCon
         title: string;
         description: string;
         serverProcessedContent?: {
-            "htmlStrings": ITypedHash<string>;
-            "searchablePlainTexts": ITypedHash<string>;
-            "imageSources": ITypedHash<string>;
-            "links": ITypedHash<string>;
+            htmlStrings?: Record<string, string>;
+            searchablePlainTexts?: Record<string, string>;
+            imageSources?: Record<string, string>;
+            links?: Record<string, string>;
         };
         dataVersion: string;
         properties: PropertiesType;
@@ -1484,10 +1598,10 @@ interface ILayoutPartsContent {
     title: string;
     description: string;
     serverProcessedContent: {
-        htmlStrings: ITypedHash<string>;
-        searchablePlainTexts: ITypedHash<string>;
-        imageSources: ITypedHash<string>;
-        links: ITypedHash<string>;
+        htmlStrings?: Record<string, string>;
+        searchablePlainTexts?: Record<string, string>;
+        imageSources?: Record<string, string>;
+        links?: Record<string, string>;
         customMetadata?: {
             imageSource?: {
                 siteId: string;
@@ -1506,6 +1620,7 @@ interface ILayoutPartsContent {
         showTopicHeader: boolean;
         showPublishDate: boolean;
         topicHeader: string;
+        enableGradientEffect: boolean;
         authorByline: string[];
         authors: {
             id: string;
@@ -1520,6 +1635,7 @@ interface ILayoutPartsContent {
         translateX?: number;
         translateY?: number;
         altText?: string;
+        hasTitleBeenCommitted?: boolean;
     };
     reservedHeight: number;
 }
@@ -1529,4 +1645,17 @@ export interface IBannerImageProps {
     imageSourceType?: number;
     translateX?: number;
     translateY?: number;
+}
+
+export interface IRepostPage {
+    Description?: string;
+    IsBannerImageUrlExternal?: boolean;
+    OriginalSourceListId?: string;
+    ShouldSaveAsDraft?: boolean;
+    OriginalSourceSiteId?: string;
+    BannerImageUrl?: string;
+    Title?: string;
+    OriginalSourceItemId?: string;
+    OriginalSourceUrl?: string;
+    OriginalSourceWebId?: string;
 }

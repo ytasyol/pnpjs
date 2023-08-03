@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Item } from "../items/types.js";
 import { ContentType, IContentType } from "./types.js";
 
@@ -14,4 +14,4 @@ declare module "../items/types" {
     }
 }
 
-addProp(_Item, "contentType", ContentType, "ContentType");
+addProp(_Item, "contentType", ContentType);

@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _User } from "../users/types.js";
 import { Outlook, IOutlook } from "./types.js";
 
@@ -11,4 +11,4 @@ declare module "../users/types" {
     }
 }
 
-addProp(_User, "outlook", Outlook, "outlook");
+addProp(_User, "outlook", Outlook);

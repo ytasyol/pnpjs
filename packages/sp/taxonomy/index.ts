@@ -1,4 +1,4 @@
-import { SPRest } from "../rest.js";
+import { SPFI } from "../fi.js";
 import { ITermStore, TermStore } from "./types.js";
 
 export {
@@ -18,11 +18,11 @@ export {
     ITermInfo,
     ITermSet,
     TermSet,
-    IRelation,
+    // IRelation,
     IRelationInfo,
     IRelations,
     ITerm,
-    Relation,
+    // Relation,
     Relations,
     Term,
     Children,
@@ -31,20 +31,20 @@ export {
     ITermSortOrderInfo,
     ITerms,
     Terms,
+    IGetOrderedTreeProps,
+    ITaxonomyLocalProperty,
 } from "./types.js";
 
-declare module "../rest" {
-    interface SPRest {
+declare module "../fi" {
+    interface SPFI {
         readonly termStore: ITermStore;
     }
 }
 
-Reflect.defineProperty(SPRest.prototype, "termStore", {
+Reflect.defineProperty(SPFI.prototype, "termStore", {
     configurable: true,
     enumerable: true,
-    get: function (this: SPRest) {
-        return this.childConfigHook(({ options, baseUrl, runtime }) => {
-            return TermStore(baseUrl).configure(options).setRuntime(runtime);
-        });
+    get: function (this: SPFI) {
+        return this.create(TermStore);
     },
 });

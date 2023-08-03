@@ -1,4 +1,4 @@
-import { addProp } from "@pnp/odata";
+import { addProp } from "@pnp/queryable";
 import { _Web } from "../webs/types.js";
 import { Navigation, INavigation } from "./types.js";
 
@@ -16,4 +16,4 @@ declare module "../webs/types" {
     }
 }
 
-addProp(_Web, "navigation", Navigation);
+addProp(_Web, "navigation", <any>Navigation);

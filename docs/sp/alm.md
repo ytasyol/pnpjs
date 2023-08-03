@@ -10,50 +10,46 @@ Before you begin provisioning applications it is important to understand the rel
 
 There are several ways using @pnp/sp to get a reference to an app catalog. These methods are to provide you the greatest amount of flexibility in gaining access to the app catalog. Ultimately each method produces an AppCatalog instance differentiated only by the web to which it points.
 
+### Get tenant app catalog
+
 ```TypeScript
-import { sp } from "@pnp/sp";
+import { spfi } from "@pnp/sp";
 import "@pnp/sp/appcatalog";
 import "@pnp/sp/webs";
+
+const sp = spfi(...);
 
 // get the current context web's app catalog
-const catalog = await sp.web.getAppCatalog()();
-
-// you can also chain off the app catalog
-const apps = await sp.web.getAppCatalog()();
-console.log(apps);
+// this will be the site collection app catalog
+const availableApps = await sp.tenantAppcatalog();
 ```
 
+### Get site collection AppCatalog
+
 ```TypeScript
-import { sp } from "@pnp/sp";
+import { spfi } from "@pnp/sp";
 import "@pnp/sp/appcatalog";
 import "@pnp/sp/webs";
 
-// you can get the tenant app catalog (or any app catalog) by using the getTenantAppCatalogWeb method
-const appCatWeb = await sp.getTenantAppCatalogWeb()();
-const appCatalog = await appCatWeb.getAppCatalog()();
+const sp = spfi(...);
 
-// you can get the tenant app catalog (or any app catalog) by passing in a url
-// get the tenant app catalog
-const tenantCatalog = await sp.web.getAppCatalog("https://mytenant.sharepoint.com/sites/appcatalog")();
-
-// get a different app catalog
-const catalog = await sp.web.getAppCatalog("https://mytenant.sharepoint.com/sites/anothersite")();
+// get the current context web's app catalog
+const availableApps = await sp.web.appcatalog();
 ```
 
-```TypeScript
-// alternatively you can create a new app catalog instance directly by importing the AppCatalog class
-import { IAppCatalog, AppCatalog } from '@pnp/sp/appcatalog';
+### Get site collection AppCatalog by URL
 
-const catalog: IAppCatalog = await AppCatalog("https://mytenant.sharepoint.com/sites/apps")();
-```
+If you know the url of the site collection whose app catalog you want you can use the following code. First you need to use one of the [methods to access a web](https://pnp.github.io/pnpjs/sp/webs/#access-a-web). Once you have the web instance you can call the `.appcatalog` property on that web instance.
+
+> If a given site collection does not have an app catalog trying to access it will throw an error.
 
 ```TypeScript
-// and finally you can combine use of the Web and AppCatalog classes to create an AppCatalog instance from an existing Web
+import { spfi } from "@pnp/sp";
 import { Web } from '@pnp/sp/webs';
-import { AppCatalog } from '@pnp/sp/appcatalog';
 
-const web = Web("https://mytenant.sharepoint.com/sites/apps");
-const catalog = await AppCatalog(web)();
+const sp = spfi(...);
+const web = Web([sp.web, "https://mytenant.sharepoint.com/sites/mysite"]);
+const catalog = await web.appcatalog();
 ```
 
 The following examples make use of a variable "catalog" which is assumed to represent an AppCatalog instance obtained using one of the above methods, supporting code is omitted for brevity.
@@ -64,15 +60,17 @@ The AppCatalog is itself a queryable collection so you can query this object dir
 
 ```TypeScript
 // get available apps
-await catalog.get();
+await catalog();
 
 // get available apps selecting two fields
-await catalog.select("Title", "Deployed").get();
+await catalog.select("Title", "Deployed")();
 ```
 
 ## Add an App
 
 This action must be performed in the context of the tenant app catalog
+
+![Batching Not Supported Banner](https://img.shields.io/badge/Batching%20Not%20Supported-important.svg)
 
 ```TypeScript
 // this represents the file bytes of the app package file
@@ -86,7 +84,7 @@ const r = await catalog.add("myapp.app", blob);
 console.log(JSON.stringify(r.data, null, 4));
 
 // all file operations are available
-const nameData = await r.file.select("Name").get();
+const nameData = await r.file.select("Name")();
 ```
 
 ## Get an App
@@ -94,7 +92,7 @@ const nameData = await r.file.select("Name").get();
 You can get the details of a single app by GUID id. This is also the branch point to perform specific app actions
 
 ```TypeScript
-const app = await catalog.getAppById("5137dff1-0b79-4ebc-8af4-ca01f7bd393c").get();
+const app = await catalog.getAppById("5137dff1-0b79-4ebc-8af4-ca01f7bd393c")();
 ```
 
 ## Perform app actions

@@ -1,6 +1,5 @@
-declare var require: (s: string) => any;
-const colors = require("ansi-colors");
-const log = require("fancy-log");
+import colors from "ansi-colors";
+import log from "fancy-log";
 
 import { PackageSchema, PackageTargetMap, PrePackageTask, PostPackageTask } from "./config.js";
 
@@ -28,7 +27,7 @@ export async function packager(version: string, config: PackageSchema): Promise<
 
     } catch (e) {
 
-        log(`${colors.bgRed(" ")} ${colors.bold(colors.red(`Packaging error`))}.`);
+        log(`${colors.bgRed(" ")} ${colors.bold(colors.red("Packaging error"))}.`);
         log(`${colors.bgRed(" ")} ${colors.bold(colors.red("Error:"))} ${colors.bold(colors.white(typeof e === "string" ? e : JSON.stringify(e)))}`);
         throw e;
     }

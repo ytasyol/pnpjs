@@ -1,72 +1,59 @@
+import { body, cancelableScope, CancelAction } from "@pnp/queryable";
+import { getGUID, isFunc, stringIsNullOrEmpty, isUrlAbsolute, combine, noInherit } from "@pnp/core";
 import {
-    _SharePointQueryableInstance,
-    ISharePointQueryableInstance,
-    _SharePointQueryableCollection,
+    _SPCollection,
     spInvokableFactory,
-    SharePointQueryableInstance,
+    SPInstance,
+    ISPInstance,
     IDeleteableWithETag,
     deleteableWithETag,
-} from "../sharepointqueryable.js";
-import { TextParser, BlobParser, JSONParser, BufferParser, headers, body } from "@pnp/odata";
-import { assign, getGUID, isFunc, stringIsNullOrEmpty, isUrlAbsolute } from "@pnp/common";
+    ISPQueryable,
+    deleteable,
+    IDeleteable,
+} from "../spqueryable.js";
 import { Item, IItem } from "../items/index.js";
-import { odataUrlFrom } from "../odata.js";
+import { odataUrlFrom } from "../utils/odata-url-from.js";
 import { defaultPath } from "../decorators.js";
-import { spPost } from "../operations.js";
-import { escapeQueryStrValue } from "../utils/escapeQueryStrValue.js";
-import { extractWebUrl } from "../utils/extractweburl.js";
-import { tag } from "../telemetry.js";
-import { toResourcePath } from "../utils/toResourcePath.js";
+import { spPost, spGet } from "../operations.js";
+import { extractWebUrl } from "../utils/extract-web-url.js";
+import { toResourcePath } from "../utils/to-resource-path.js";
+import { ISiteUserProps } from "../site-users/types.js";
+import { encodePath } from "../utils/encode-path-str.js";
+import { IMoveCopyOptions } from "../types.js";
+import { ReadableFile } from "./readable-file.js";
+import "../context-info/index.js";
+import { BatchNever } from "../batching.js";
 
 /**
  * Describes a collection of File objects
  *
  */
 @defaultPath("files")
-export class _Files extends _SharePointQueryableCollection<IFileInfo[]> {
+export class _Files extends _SPCollection<IFileInfo[]> {
 
     /**
      * Gets a File by filename
      *
      * @param name The name of the file, including extension.
      */
-    public getByName(name: string): IFile {
+    public getByUrl(name: string): IFile {
         if (/%#/.test(name)) {
             throw Error("For file names containing % or # please use web.getFileByServerRelativePath");
         }
-        return tag.configure(File(this).concat(`('${escapeQueryStrValue(name)}')`), "fis.getByName");
-    }
-
-    /**
-     * Uploads a file. Not supported for batching
-     *
-     * @param url The folder-relative url of the file.
-     * @param content The file contents
-     * @param shouldOverWrite Should a file with the same name in the same location be overwritten? (default: true)
-     * @returns The new File and the raw response.
-     */
-    @tag("fis.add")
-    public async add(url: string, content: any, shouldOverWrite = true): Promise<IFileAddResult> {
-        const response = await spPost(Files(this, `add(overwrite=${shouldOverWrite},url='${escapeQueryStrValue(url)}')`), {
-            body: content,
-        });
-        return {
-            data: response,
-            file: this.getByName(url),
-        };
+        return File(this).concat(`('${encodePath(name)}')`);
     }
 
     /**
      * Adds a file using the pound percent safe methods
      *
-     * @param url Excoded url of the file
+     * @param url Encoded url of the file
      * @param content The file content
      * @param parameters Additional parameters to control method behavior
      */
-    @tag("fis.addUsingPath")
+    @cancelableScope
     public async addUsingPath(url: string, content: string | ArrayBuffer | Blob, parameters: IAddUsingPathProps = { Overwrite: false }): Promise<IFileAddResult> {
 
-        const path = [`AddUsingPath(decodedurl='${escapeQueryStrValue(url)}'`];
+        const path = [`AddUsingPath(decodedurl='${encodePath(url)}'`];
 
         if (parameters) {
             if (parameters.Overwrite) {
@@ -76,7 +63,7 @@ export class _Files extends _SharePointQueryableCollection<IFileInfo[]> {
                 path.push(",AutoCheckoutOnInvalidData=true");
             }
             if (!stringIsNullOrEmpty(parameters.XorHash)) {
-                path.push(`,XorHash=${escapeQueryStrValue(parameters.XorHash)}`);
+                path.push(`,XorHash=${encodePath(parameters.XorHash)}`);
             }
         }
 
@@ -86,7 +73,7 @@ export class _Files extends _SharePointQueryableCollection<IFileInfo[]> {
 
         return {
             data: resp,
-            file: File(odataUrlFrom(resp)),
+            file: fileFromServerRelativePath(this, resp.ServerRelativeUrl),
         };
     }
 
@@ -100,12 +87,18 @@ export class _Files extends _SharePointQueryableCollection<IFileInfo[]> {
      * @param chunkSize The size of each file slice, in bytes (default: 10485760)
      * @returns The new File and the raw response.
      */
-    @tag("fis.addChunked")
+    @cancelableScope
     public async addChunked(url: string, content: Blob, progress?: (data: IFileUploadProgressData) => void, shouldOverWrite = true, chunkSize = 10485760): Promise<IFileAddResult> {
 
-        const response: IFileInfo = await spPost(this.clone(Files, `add(overwrite=${shouldOverWrite},url='${escapeQueryStrValue(url)}')`, false));
-        const file = File(odataUrlFrom(response));
-        return await file.setContentChunked(content, progress, chunkSize);
+        const response = await spPost(Files(this, `add(overwrite=${shouldOverWrite},url='${encodePath(url)}')`));
+
+        const file = fileFromServerRelativePath(this, response.ServerRelativeUrl);
+
+        file.using(CancelAction(() => {
+            return File(file).delete();
+        }));
+
+        return file.setContentChunked(content, progress, chunkSize);
     }
 
     /**
@@ -115,12 +108,12 @@ export class _Files extends _SharePointQueryableCollection<IFileInfo[]> {
      * @param templateFileType The type of use to create the file.
      * @returns The template file that was added and the raw response.
      */
-    @tag("fis.addTemplateFile")
+    @cancelableScope
     public async addTemplateFile(fileUrl: string, templateFileType: TemplateFileType): Promise<IFileAddResult> {
-        const response = await spPost(this.clone(Files, `addTemplateFile(urloffile='${escapeQueryStrValue(fileUrl)}',templatefiletype=${templateFileType})`, false));
+        const response: IFileInfo = await spPost(Files(this, `addTemplateFile(urloffile='${encodePath(fileUrl)}',templatefiletype=${templateFileType})`));
         return {
             data: response,
-            file: File(odataUrlFrom(response)),
+            file: fileFromServerRelativePath(this, response.ServerRelativeUrl),
         };
     }
 }
@@ -131,16 +124,16 @@ export const Files = spInvokableFactory<IFiles>(_Files);
  * Describes a single File instance
  *
  */
-export class _File extends _SharePointQueryableInstance<IFileInfo> {
+export class _File extends ReadableFile<IFileInfo> {
 
-    public delete = deleteableWithETag("fi");
+    public delete = deleteableWithETag();
 
     /**
      * Gets a value that specifies the list item field values for the list item corresponding to the file.
      *
      */
-    public get listItemAllFields(): ISharePointQueryableInstance {
-        return tag.configure(SharePointQueryableInstance(this, "listItemAllFields"), "fi.listItemAllFields");
+    public get listItemAllFields(): ISPInstance {
+        return SPInstance(this, "listItemAllFields");
     }
 
     /**
@@ -148,18 +141,29 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      *
      */
     public get versions(): IVersions {
-        return tag.configure(Versions(this), "fi.versions");
+        return Versions(this);
     }
 
+    /**
+     * Gets the current locked by user
+     *
+     */
+    public async getLockedByUser(): Promise<ISiteUserProps | null> {
+        const u = await spGet(File(this, "lockedByUser"));
+        if (u["odata.null"] === true) {
+            return null;
+        } else {
+            return u;
+        }
+    }
     /**
      * Approves the file submitted for content approval with the specified comment.
      * Only documents in lists that are enabled for content approval can be approved.
      *
      * @param comment The comment for the approval.
      */
-    @tag("fi.approve")
     public approve(comment = ""): Promise<void> {
-        return spPost(this.clone(File, `approve(comment='${escapeQueryStrValue(comment)}')`));
+        return spPost(File(this, `approve(comment='${encodePath(comment)}')`));
     }
 
     /**
@@ -171,9 +175,8 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      *
      * @param uploadId The unique identifier of the upload session.
      */
-    @tag("fi.cancelUpload")
     public cancelUpload(uploadId: string): Promise<void> {
-        return spPost(this.clone(File, `cancelUpload(uploadId=guid'${uploadId}')`, false));
+        return spPost(File(this, `cancelUpload(uploadId=guid'${uploadId}')`));
     }
 
     /**
@@ -182,22 +185,20 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      * @param comment A comment for the check-in. Its length must be <= 1023.
      * @param checkinType The check-in type for the file.
      */
-    @tag("fi.checkin")
     public checkin(comment = "", checkinType = CheckinType.Major): Promise<void> {
 
         if (comment.length > 1023) {
             throw Error("The maximum comment length is 1023 characters.");
         }
 
-        return spPost(this.clone(File, `checkin(comment='${escapeQueryStrValue(comment)}',checkintype=${checkinType})`));
+        return spPost(File(this, `checkin(comment='${encodePath(comment)}',checkintype=${checkinType})`));
     }
 
     /**
      * Checks out the file from a document library.
      */
-    @tag("fi.checkout")
     public checkout(): Promise<void> {
-        return spPost(this.clone(File, "checkout"));
+        return spPost(File(this, "checkout"));
     }
 
     /**
@@ -206,63 +207,8 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      * @param url The absolute url or server relative url of the destination file path to copy to.
      * @param shouldOverWrite Should a file with the same name in the same location be overwritten?
      */
-    @tag("fi.copyTo")
     public copyTo(url: string, shouldOverWrite = true): Promise<void> {
-        return spPost(this.clone(File, `copyTo(strnewurl='${escapeQueryStrValue(url)}',boverwrite=${shouldOverWrite})`));
-    }
-
-    /**
-     * Copies the file by path to destination path.
-     * Also works with different site collections.
-     *
-     * @param destUrl The absolute url or server relative url of the destination file path to copy to.
-     * @param shouldOverWrite Should a file with the same name in the same location be overwritten?
-     * @param keepBoth Keep both if file with the same name in the same location already exists? Only relevant when shouldOverWrite is set to false.
-     */
-    @tag("fi.copyByPath")
-    public async copyByPath(destUrl: string, shouldOverWrite: boolean, KeepBoth = false): Promise<void> {
-
-        const { ServerRelativeUrl: srcUrl, ["odata.id"]: absoluteUrl } = await this.select("ServerRelativeUrl")();
-        const webBaseUrl = extractWebUrl(absoluteUrl);
-        const hostUrl = webBaseUrl.replace("://", "___").split("/")[0].replace("___", "://");
-        await spPost(File(webBaseUrl, `/_api/SP.MoveCopyUtil.CopyFileByPath(overwrite=@a1)?@a1=${shouldOverWrite}`),
-            body({
-                destPath: toResourcePath(isUrlAbsolute(destUrl) ? destUrl : `${hostUrl}${destUrl}`),
-                options: {
-                    KeepBoth: KeepBoth,
-                    ResetAuthorAndCreatedOnCopy: true,
-                    ShouldBypassSharedLocks: true,
-                    __metadata: {
-                        type: "SP.MoveCopyOptions",
-                    },
-                },
-                srcPath: toResourcePath(isUrlAbsolute(srcUrl) ? srcUrl : `${hostUrl}${srcUrl}`),
-            }));
-    }
-
-    /**
-     * Denies approval for a file that was submitted for content approval.
-     * Only documents in lists that are enabled for content approval can be denied.
-     *
-     * @param comment The comment for the denial.
-     */
-    @tag("fi.deny")
-    public deny(comment = ""): Promise<void> {
-        if (comment.length > 1023) {
-            throw Error("The maximum comment length is 1023 characters.");
-        }
-        return spPost(this.clone(File, `deny(comment='${escapeQueryStrValue(comment)}')`));
-    }
-
-    /**
-     * Moves the file to the specified destination url.
-     *
-     * @param url The absolute url or server relative url of the destination file path to move to.
-     * @param moveOperations The bitwise MoveOperations value for how to move the file.
-     */
-    @tag("fi.moveTo")
-    public moveTo(url: string, moveOperations = MoveOperations.Overwrite): Promise<void> {
-        return spPost(this.clone(File, `moveTo(newurl='${escapeQueryStrValue(url)}',flags=${moveOperations})`));
+        return spPost(File(this, `copyTo(strnewurl='${encodePath(url)}',boverwrite=${shouldOverWrite})`));
     }
 
     /**
@@ -271,27 +217,87 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      *
      * @param destUrl The absolute url or server relative url of the destination file path to move to.
      * @param shouldOverWrite Should a file with the same name in the same location be overwritten?
+     * @param options Allows you to supply the full set of options controlling the copy behavior
+     */
+    public async copyByPath(destUrl: string, shouldOverWrite: boolean, options: Partial<Omit<IMoveCopyOptions, "RetainEditorAndModifiedOnMove">>): Promise<IFile>;
+    /**
+     * Moves the file by path to the specified destination url.
+     * Also works with different site collections.
+     *
+     * @param destUrl The absolute url or server relative url of the destination file path to move to.
+     * @param shouldOverWrite Should a file with the same name in the same location be overwritten?
      * @param keepBoth Keep both if file with the same name in the same location already exists? Only relevant when shouldOverWrite is set to false.
      */
-    @tag("fi.moveByPath")
-    public async moveByPath(destUrl: string, shouldOverWrite: boolean, KeepBoth = false): Promise<void> {
+    public async copyByPath(destUrl: string, shouldOverWrite: boolean, KeepBoth?: boolean): Promise<IFile>;
+    @cancelableScope
+    public async copyByPath(destUrl: string, ...rest: [boolean, Partial<Omit<IMoveCopyOptions, "RetainEditorAndModifiedOnMove">>] | [boolean, boolean?]): Promise<IFile> {
 
-        const { ServerRelativeUrl: srcUrl, ["odata.id"]: absoluteUrl } = await this.select("ServerRelativeUrl")();
-        const webBaseUrl = extractWebUrl(absoluteUrl);
-        const hostUrl = webBaseUrl.replace("://", "___").split("/")[0].replace("___", "://");
-        await spPost(File(webBaseUrl, `/_api/SP.MoveCopyUtil.MoveFileByPath(overwrite=@a1)?@a1=${shouldOverWrite}`),
-            body({
-                destPath: toResourcePath(isUrlAbsolute(destUrl) ? destUrl : `${hostUrl}${destUrl}`),
-                options: {
-                    KeepBoth: KeepBoth,
-                    ResetAuthorAndCreatedOnCopy: false,
-                    ShouldBypassSharedLocks: true,
-                    __metadata: {
-                        type: "SP.MoveCopyOptions",
-                    },
-                },
-                srcPath: toResourcePath(isUrlAbsolute(srcUrl) ? srcUrl : `${hostUrl}${srcUrl}`),
-            }));
+        let options: Partial<IMoveCopyOptions> = {
+            ShouldBypassSharedLocks: true,
+            ResetAuthorAndCreatedOnCopy: true,
+            KeepBoth: false,
+        };
+
+        if (rest.length === 2) {
+            if (typeof rest[1] === "boolean") {
+                options.KeepBoth = rest[1];
+            } else if (typeof rest[1] === "object") {
+                options = { ...options, ...rest[1] };
+            }
+        }
+
+        return this.moveCopyImpl(destUrl, options, rest[0], "CopyFileByPath");
+    }
+
+    /**
+     * Denies approval for a file that was submitted for content approval.
+     * Only documents in lists that are enabled for content approval can be denied.
+     *
+     * @param comment The comment for the denial.
+     */
+    public deny(comment = ""): Promise<void> {
+        if (comment.length > 1023) {
+            throw Error("The maximum comment length is 1023 characters.");
+        }
+        return spPost(File(this, `deny(comment='${encodePath(comment)}')`));
+    }
+
+    /**
+     * Moves the file by path to the specified destination url.
+     * Also works with different site collections.
+     *
+     * @param destUrl The absolute url or server relative url of the destination file path to move to.
+     * @param shouldOverWrite Should a file with the same name in the same location be overwritten?
+     * @param options Allows you to supply the full set of options controlling the move behavior
+     */
+    public async moveByPath(destUrl: string, shouldOverWrite: boolean, options: Partial<Omit<IMoveCopyOptions, "ResetAuthorAndCreatedOnCopy">>): Promise<IFile>;
+    /**
+     * Moves the file by path to the specified destination url.
+     * Also works with different site collections.
+     *
+     * @param destUrl The absolute url or server relative url of the destination file path to move to.
+     * @param shouldOverWrite Should a file with the same name in the same location be overwritten?
+     * @param keepBoth Keep both if file with the same name in the same location already exists? Only relevant when shouldOverWrite is set to false.
+     */
+    public async moveByPath(destUrl: string, shouldOverWrite: boolean, KeepBoth?: boolean): Promise<IFile>;
+    @cancelableScope
+    public async moveByPath(destUrl: string, ...rest: [boolean, Partial<Omit<IMoveCopyOptions, "ResetAuthorAndCreatedOnCopy">>] | [boolean, boolean?]): Promise<IFile> {
+
+        let options: Partial<IMoveCopyOptions> = {
+            KeepBoth: false,
+            ShouldBypassSharedLocks: true,
+            RetainEditorAndModifiedOnMove: false,
+        };
+
+        if (rest.length === 2) {
+            if (typeof rest[1] === "boolean") {
+                options.KeepBoth = rest[1];
+            } else if (typeof rest[1] === "object") {
+                options = { ...options, ...rest[1] };
+            }
+        }
+
+        return this.moveCopyImpl(destUrl, options, rest[0], "MoveFileByPath");
     }
 
     /**
@@ -299,12 +305,11 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      *
      * @param comment The comment for the published file. Its length must be <= 1023.
      */
-    @tag("fi.publish")
     public publish(comment = ""): Promise<void> {
         if (comment.length > 1023) {
             throw Error("The maximum comment length is 1023 characters.");
         }
-        return spPost(this.clone(File, `publish(comment='${escapeQueryStrValue(comment)}')`));
+        return spPost(File(this, `publish(comment='${encodePath(comment)}')`));
     }
 
     /**
@@ -312,9 +317,8 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      *
      * @returns The GUID of the recycled file.
      */
-    @tag("fi.recycle")
     public recycle(): Promise<string> {
-        return spPost(this.clone(File, "recycle"));
+        return spPost(File(this, "recycle"));
     }
 
     /**
@@ -322,18 +326,16 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      *
      * @param parameters Specifies the options to use when deleting a file.
      */
-    @tag("fi.del-params")
     public async deleteWithParams(parameters: Partial<IFileDeleteParams>): Promise<void> {
-        return spPost(this.clone(File, "DeleteWithParameters"), body({ parameters }));
+        return spPost(File(this, "DeleteWithParameters"), body({ parameters }));
     }
 
     /**
      * Reverts an existing checkout for the file.
      *
      */
-    @tag("fi.undoCheckout")
     public undoCheckout(): Promise<void> {
-        return spPost(this.clone(File, "undoCheckout"));
+        return spPost(File(this, "undoCheckout"));
     }
 
     /**
@@ -341,22 +343,20 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      *
      * @param comment The comment for the unpublish operation. Its length must be <= 1023.
      */
-    @tag("fi.unpublish")
     public unpublish(comment = ""): Promise<void> {
         if (comment.length > 1023) {
             throw Error("The maximum comment length is 1023 characters.");
         }
-        return spPost(this.clone(File, `unpublish(comment='${escapeQueryStrValue(comment)}')`));
+        return spPost(File(this, `unpublish(comment='${encodePath(comment)}')`));
     }
 
     /**
      * Checks to see if the file represented by this object exists
      *
      */
-    @tag("fi.exists")
     public async exists(): Promise<boolean> {
         try {
-            const r = await this.clone(File).select("Exists")();
+            const r = await File(this).select("Exists")();
             return r.Exists;
         } catch (e) {
             // this treats any error here as the file not existing, which
@@ -366,53 +366,14 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
     }
 
     /**
-     * Gets the contents of the file as text. Not supported in batching.
-     *
-     */
-    @tag("fi.getText")
-    public getText(): Promise<string> {
-
-        return this.clone(File, "$value", false).usingParser(new TextParser())(headers({ "binaryStringResponseBody": "true" }));
-    }
-
-    /**
-     * Gets the contents of the file as a blob, does not work in Node.js. Not supported in batching.
-     *
-     */
-    @tag("fi.getBlob")
-    public getBlob(): Promise<Blob> {
-
-        return this.clone(File, "$value", false).usingParser(new BlobParser())(headers({ "binaryStringResponseBody": "true" }));
-    }
-
-    /**
-     * Gets the contents of a file as an ArrayBuffer, works in Node.js. Not supported in batching.
-     */
-    @tag("fi.getBuffer")
-    public getBuffer(): Promise<ArrayBuffer> {
-
-        return this.clone(File, "$value", false).usingParser(new BufferParser())(headers({ "binaryStringResponseBody": "true" }));
-    }
-
-    /**
-     * Gets the contents of a file as an ArrayBuffer, works in Node.js. Not supported in batching.
-     */
-    @tag("fi.getJSON")
-    public getJSON(): Promise<any> {
-
-        return this.clone(File, "$value", false).usingParser(new JSONParser())(headers({ "binaryStringResponseBody": "true" }));
-    }
-
-    /**
      * Sets the content of a file, for large files use setContentChunked. Not supported in batching.
      *
      * @param content The file content
      *
      */
-    @tag("fi.setContent")
     public async setContent(content: string | ArrayBuffer | Blob): Promise<IFile> {
 
-        await spPost(this.clone(File, "$value", false), {
+        await spPost(File(this, "$value"), {
             body: content,
             headers: {
                 "X-HTTP-Method": "PUT",
@@ -424,12 +385,11 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
     /**
      * Gets the associated list item for this folder, loading the default properties
      */
-    @tag("fi.getItem")
     public async getItem<T>(...selects: string[]): Promise<IItem & T> {
 
         const q = this.listItemAllFields;
         const d = await q.select(...selects)();
-        return assign(Item(odataUrlFrom(d)), d);
+        return Object.assign(Item([this, odataUrlFrom(d)]), d);
     }
 
     /**
@@ -439,28 +399,33 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      * @param progress A callback function which can be used to track the progress of the upload
      * @param chunkSize The size of each file slice, in bytes (default: 10485760)
      */
+    @cancelableScope
     public async setContentChunked(file: Blob, progress?: (data: IFileUploadProgressData) => void, chunkSize = 10485760): Promise<IFileAddResult> {
 
         if (!isFunc(progress)) {
             progress = () => null;
         }
 
-        const fileSize = file.size;
+        const fileSize = file?.size || (<any>file).length;
         const totalBlocks = parseInt((fileSize / chunkSize).toString(), 10) + ((fileSize % chunkSize === 0) ? 1 : 0);
         const uploadId = getGUID();
 
+        const fileRef = File(this).using(CancelAction(() => {
+            return File(fileRef).cancelUpload(uploadId);
+        }));
+
         // report that we are starting
         progress({ uploadId, blockNumber: 1, chunkSize, currentPointer: 0, fileSize, stage: "starting", totalBlocks });
-        let currentPointer = await this.startUpload(uploadId, file.slice(0, chunkSize));
+        let currentPointer = await fileRef.startUpload(uploadId, file.slice(0, chunkSize));
 
         // skip the first and last blocks
         for (let i = 2; i < totalBlocks; i++) {
             progress({ uploadId, blockNumber: i, chunkSize, currentPointer, fileSize, stage: "continue", totalBlocks });
-            currentPointer = await this.continueUpload(uploadId, currentPointer, file.slice(currentPointer, currentPointer + chunkSize));
+            currentPointer = await fileRef.continueUpload(uploadId, currentPointer, file.slice(currentPointer, currentPointer + chunkSize));
         }
 
         progress({ uploadId, blockNumber: totalBlocks, chunkSize, currentPointer, fileSize, stage: "finishing", totalBlocks });
-        return this.finishUpload(uploadId, currentPointer, file.slice(currentPointer));
+        return fileRef.finishUpload(uploadId, currentPointer, file.slice(currentPointer));
     }
 
     /**
@@ -477,9 +442,8 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      * @param fragment The file contents.
      * @returns The size of the total uploaded data in bytes.
      */
-    @tag("fi.startUpload")
     protected async startUpload(uploadId: string, fragment: ArrayBuffer | Blob): Promise<number> {
-        let n = await spPost(this.clone(File, `startUpload(uploadId=guid'${uploadId}')`, false), { body: fragment });
+        let n = await spPost(File(this, `startUpload(uploadId=guid'${uploadId}')`), { body: fragment });
         if (typeof n === "object") {
             // When OData=verbose the payload has the following shape:
             // { StartUpload: "10485760" }
@@ -499,9 +463,8 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      * @param fragment The file contents.
      * @returns The size of the total uploaded data in bytes.
      */
-    @tag("fi.continueUpload")
     protected async continueUpload(uploadId: string, fileOffset: number, fragment: ArrayBuffer | Blob): Promise<number> {
-        let n = await spPost(this.clone(File, `continueUpload(uploadId=guid'${uploadId}',fileOffset=${fileOffset})`, false), { body: fragment });
+        let n = await spPost(File(this, `continueUpload(uploadId=guid'${uploadId}',fileOffset=${fileOffset})`), { body: fragment });
         if (typeof n === "object") {
             // When OData=verbose the payload has the following shape:
             // { ContinueUpload: "20971520" }
@@ -520,13 +483,37 @@ export class _File extends _SharePointQueryableInstance<IFileInfo> {
      * @param fragment The file contents.
      * @returns The newly uploaded file.
      */
-    @tag("fi.finishUpload")
     protected async finishUpload(uploadId: string, fileOffset: number, fragment: ArrayBuffer | Blob): Promise<IFileAddResult> {
-        const response = await spPost(this.clone(File, `finishUpload(uploadId=guid'${uploadId}',fileOffset=${fileOffset})`, false), { body: fragment });
+        const response: IFileInfo = await spPost(File(this, `finishUpload(uploadId=guid'${uploadId}',fileOffset=${fileOffset})`), { body: fragment });
         return {
             data: response,
-            file: File(odataUrlFrom(response)),
+            file: fileFromServerRelativePath(this, response.ServerRelativeUrl),
         };
+    }
+
+    protected moveCopyImpl(destUrl: string, options: Partial<IMoveCopyOptions>, overwrite: boolean, methodName: string): Promise<IFile> {
+
+        // create a timeline we will manipulate for this request
+        const poster = File(this);
+
+        // add our pre-request actions, this fixes issues with batching hanging #2668
+        poster.on.pre(noInherit(async (url, init, result) => {
+
+            const { ServerRelativeUrl: srcUrl, ["odata.id"]: absoluteUrl } = await File(this).using(BatchNever()).select("ServerRelativeUrl")();
+            const webBaseUrl = new URL(extractWebUrl(absoluteUrl));
+
+            url = combine(webBaseUrl.toString(), `/_api/SP.MoveCopyUtil.${methodName}(overwrite=@a1)?@a1=${overwrite}`);
+
+            init = body({
+                destPath: toResourcePath(isUrlAbsolute(destUrl) ? destUrl : `${webBaseUrl.protocol}//${webBaseUrl.host}${destUrl}`),
+                options,
+                srcPath: toResourcePath(isUrlAbsolute(srcUrl) ? srcUrl : `${webBaseUrl.protocol}//${webBaseUrl.host}${srcUrl}`),
+            }, init);
+
+            return [url, init, result];
+        }));
+
+        return spPost(poster).then(() => fileFromPath(this, destUrl));
     }
 }
 
@@ -534,11 +521,47 @@ export interface IFile extends _File, IDeleteableWithETag { }
 export const File = spInvokableFactory<IFile>(_File);
 
 /**
+ * Creates an IFile instance given a base object and a server relative path
+ *
+ * @param base Valid SPQueryable from which the observers will be used and the web url extracted
+ * @param serverRelativePath The server relative url to the file (ex: '/sites/dev/documents/file.txt')
+ * @returns IFile instance referencing the file described by the supplied parameters
+ */
+export function fileFromServerRelativePath(base: ISPQueryable, serverRelativePath: string): IFile {
+    return File([base, extractWebUrl(base.toUrl())], `_api/web/getFileByServerRelativePath(decodedUrl='${encodePath(serverRelativePath)}')`);
+}
+
+/**
+ * Creates an IFile instance given a base object and an absolute path
+ *
+ * @param base Valid SPQueryable from which the observers will be used
+ * @param serverRelativePath The absolute url to the file (ex: 'https://tenant.sharepoint.com/sites/dev/documents/file.txt')
+ * @returns IFile instance referencing the file described by the supplied parameters
+ */
+export async function fileFromAbsolutePath(base: ISPQueryable, absoluteFilePath: string): Promise<IFile> {
+
+    const { WebFullUrl } = await File(this).using(BatchNever()).getContextInfo(absoluteFilePath);
+    const { pathname } = new URL(absoluteFilePath);
+    return fileFromServerRelativePath(File([base, combine(WebFullUrl, "_api/web")]), decodeURIComponent(pathname));
+}
+
+/**
+ * Creates an IFile intance given a base object and either an absolute or server relative path to a file
+ *
+ * @param base Valid SPQueryable from which the observers will be used
+ * @param serverRelativePath server relative or absolute url to the file (ex: 'https://tenant.sharepoint.com/sites/dev/documents/file.txt' or '/sites/dev/documents/file.txt')
+ * @returns IFile instance referencing the file described by the supplied parameters
+ */
+export async function fileFromPath(base: ISPQueryable, path: string): Promise<IFile> {
+    return (isUrlAbsolute(path) ? fileFromAbsolutePath : fileFromServerRelativePath)(base, path);
+}
+
+/**
  * Describes a collection of Version objects
  *
  */
 @defaultPath("versions")
-export class _Versions extends _SharePointQueryableCollection {
+export class _Versions extends _SPCollection {
 
     /**
      * Gets a version by id
@@ -546,14 +569,13 @@ export class _Versions extends _SharePointQueryableCollection {
      * @param versionId The id of the version to retrieve
      */
     public getById(versionId: number): IVersion {
-        return tag.configure(Version(this).concat(`(${versionId})`), "vers.getById");
+        return Version(this).concat(`(${versionId})`);
     }
 
     /**
      * Deletes all the file version objects in the collection.
      *
      */
-    @tag("vers.deleteAll")
     public deleteAll(): Promise<void> {
         return spPost(Versions(this, "deleteAll"));
     }
@@ -563,9 +585,8 @@ export class _Versions extends _SharePointQueryableCollection {
      *
      * @param versionId The ID of the file version to delete.
      */
-    @tag("vers.deleteById")
     public deleteById(versionId: number): Promise<void> {
-        return spPost(this.clone(Versions, `deleteById(vid=${versionId})`));
+        return spPost(Versions(this, `deleteById(vid=${versionId})`));
     }
 
     /**
@@ -573,9 +594,8 @@ export class _Versions extends _SharePointQueryableCollection {
      *
      * @param versionId The ID of the file version to delete.
      */
-    @tag("vers.recycleByID")
     public recycleByID(versionId: number): Promise<void> {
-        return spPost(this.clone(Versions, `recycleByID(vid=${versionId})`));
+        return spPost(Versions(this, `recycleByID(vid=${versionId})`));
     }
 
     /**
@@ -583,9 +603,8 @@ export class _Versions extends _SharePointQueryableCollection {
      *
      * @param label The version label of the file version to delete, for example: 1.2
      */
-    @tag("vers.deleteByLabel")
     public deleteByLabel(label: string): Promise<void> {
-        return spPost(this.clone(Versions, `deleteByLabel(versionlabel='${escapeQueryStrValue(label)}')`));
+        return spPost(Versions(this, `deleteByLabel(versionlabel='${encodePath(label)}')`));
     }
 
     /**
@@ -593,9 +612,8 @@ export class _Versions extends _SharePointQueryableCollection {
      *
      * @param label The version label of the file version to delete, for example: 1.2
      */
-    @tag("vers.recycleByLabel")
     public recycleByLabel(label: string): Promise<void> {
-        return spPost(this.clone(Versions, `recycleByLabel(versionlabel='${escapeQueryStrValue(label)}')`));
+        return spPost(Versions(this, `recycleByLabel(versionlabel='${encodePath(label)}')`));
     }
 
     /**
@@ -603,9 +621,8 @@ export class _Versions extends _SharePointQueryableCollection {
      *
      * @param label The version label of the file version to restore, for example: 1.2
      */
-    @tag("vers.restoreByLabel")
     public restoreByLabel(label: string): Promise<void> {
-        return spPost(this.clone(Versions, `restoreByLabel(versionlabel='${escapeQueryStrValue(label)}')`));
+        return spPost(Versions(this, `restoreByLabel(versionlabel='${encodePath(label)}')`));
     }
 }
 export interface IVersions extends _Versions { }
@@ -615,10 +632,10 @@ export const Versions = spInvokableFactory<IVersions>(_Versions);
  * Describes a single Version instance
  *
  */
-export class _Version extends _SharePointQueryableInstance {
-    public delete = deleteableWithETag("ver");
+export class _Version extends ReadableFile<IVersionInfo> {
+    public delete = deleteable();
 }
-export interface IVersion extends _Version, IDeleteableWithETag { }
+export interface IVersion extends _Version, IDeleteable { }
 export const Version = spInvokableFactory<IVersion>(_Version);
 
 /**
@@ -723,6 +740,18 @@ export interface IFileInfo {
     UIVersionLabel: string;
     UniqueId: string;
     WebId: string;
+}
+
+export interface IVersionInfo {
+    Created: string;
+    ID: number;
+    VersionLabel: string;
+    Length: number;
+    Size: number;
+    CreatedBy: any;
+    Url: string;
+    IsCurrentVersion: boolean;
+    CheckInComment: string;
 }
 
 export interface IFileDeleteParams {

@@ -1,103 +1,115 @@
 import { expect } from "chai";
-import { testSettings } from "../main.js";
-import { graph } from "@pnp/graph";
 import "@pnp/graph/users";
 import "@pnp/graph/groups";
 import "@pnp/graph/directory-objects";
 import { GroupType } from "@pnp/graph/groups";
-import { getRandomString, getGUID } from "@pnp/common";
+import { getRandomString, getGUID, stringIsNullOrEmpty } from "@pnp/core";
 import getValidUser from "./utilities/getValidUser.js";
 
 describe("Directory Objects", function () {
 
-    // We can't test for graph.me calls in an application context
-    if (testSettings.enableWebTests && testSettings.testUser?.length > 0) {
-        let testUserName = "";
-        let testChildGroupID = "";
-        let testParentGroupID = "";
-        const testGUID = getGUID();
+    let testUserName = "";
+    let testChildGroupID = "";
+    let testParentGroupID = "";
+    const testGUID = getGUID();
+    let userInfo = null;
 
-        this.beforeAll(async function () {
-            // Get a sample user
-            const userInfo = await getValidUser();
-            testUserName = userInfo.userPrincipalName;
+    before(async function () {
 
-            // Create a test group to ensure we have a directory object
-            let groupName = `TestGroup_${getRandomString(4)}`;
-            let result = await graph.groups.add(groupName, groupName, GroupType.Security, {
-                "members@odata.bind": [
-                    "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
-                ],
-                "owners@odata.bind": [
-                    "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
-                ],
-            });
-            testChildGroupID = result.data.id;
+        if (!this.pnp.settings.enableWebTests || stringIsNullOrEmpty(this.pnp.settings.testUser)) {
+            this.skip();
+        }
 
-            groupName = `TestGroup_${getRandomString(4)}`;
-            result = await graph.groups.add(groupName, groupName, GroupType.Security, {
-                "members@odata.bind": [
-                    "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
-                    "https://graph.microsoft.com/v1.0/groups/" + testChildGroupID,
-                ],
-                "owners@odata.bind": [
-                    "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
-                ],
-            });
-            testParentGroupID = result.data.id;
+        // Get a sample user
+        userInfo = await getValidUser.call(this);
+        testUserName = userInfo.userPrincipalName;
+
+        // Create a test group to ensure we have a directory object
+        let groupName = `TestGroup_${getRandomString(4)}`;
+        let result = await this.pnp.graph.groups.add(groupName, groupName, GroupType.Security, {
+            "members@odata.bind": [
+                "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
+            ],
+            "owners@odata.bind": [
+                "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
+            ],
         });
+        testChildGroupID = result.data.id;
 
-        it("Get User Member Objects", async function () {
-            const memberObjects = await graph.users.getById(testUserName).getMemberObjects();
-            return expect(memberObjects).contains(testChildGroupID);
+        groupName = `TestGroup_${getRandomString(4)}`;
+        result = await this.pnp.graph.groups.add(groupName, groupName, GroupType.Security, {
+            "members@odata.bind": [
+                "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
+                "https://graph.microsoft.com/v1.0/groups/" + testChildGroupID,
+            ],
+            "owners@odata.bind": [
+                "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
+            ],
         });
+        testParentGroupID = result.data.id;
+    });
 
-        it("Get Group Member Objects", async function () {
-            const memberObjects = await graph.groups.getById(testChildGroupID).getMemberObjects(true);
-            return expect(memberObjects).contains(testParentGroupID);
+    it("delete", async function () {
+        const groupName = `TestGroup_${getRandomString(4)}`;
+        const result = await this.pnp.graph.groups.add(groupName, groupName, GroupType.Security, {
+            "members@odata.bind": [
+                "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
+            ],
+            "owners@odata.bind": [
+                "https://graph.microsoft.com/v1.0/users/" + userInfo.id,
+            ],
         });
+        const testDeleteGroupID = result.data.id;
+        return expect(this.pnp.graph.groups.getById(testDeleteGroupID).delete()).eventually.be.fulfilled;
+    });
 
-        it("Get User Member Groups", async function () {
-            const memberObjects = await graph.users.getById(testUserName).getMemberGroups(true);
-            return expect(memberObjects).contains(testChildGroupID);
-        });
+    it("Get User Member Objects", async function () {
+        const memberObjects = await this.pnp.graph.users.getById(testUserName).getMemberObjects();
+        return expect(memberObjects).contains(testChildGroupID);
+    });
 
-        it("Get Group Member Objects", async function () {
-            const memberObjects = await graph.groups.getById(testChildGroupID).getMemberGroups();
-            return expect(memberObjects).contains(testParentGroupID);
-        });
+    it("Get Group Member Objects", async function () {
+        const memberObjects = await this.pnp.graph.groups.getById(testChildGroupID).getMemberObjects(true);
+        return expect(memberObjects).contains(testParentGroupID);
+    });
 
-        it("Check User Member Groups", async function () {
-            const memberGroups = await graph.users.getById(testUserName).checkMemberGroups([testChildGroupID, testParentGroupID, testGUID]);
-            return expect(memberGroups.length).is.equal(2);
-        });
+    it("Get User Member Groups", async function () {
+        const memberObjects = await this.pnp.graph.users.getById(testUserName).getMemberGroups(true);
+        return expect(memberObjects).contains(testChildGroupID);
+    });
 
-        it("Check User Member Groups", async function () {
-            const memberGroups = await graph.groups.getById(testChildGroupID).checkMemberGroups([testChildGroupID, testParentGroupID, testGUID]);
-            return expect(memberGroups.length).is.equal(1);
-        });
+    it("Get Group Member Objects", async function () {
+        const memberObjects = await this.pnp.graph.groups.getById(testChildGroupID).getMemberGroups();
+        return expect(memberObjects).contains(testParentGroupID);
+    });
 
-        it("Get directory object by ID", async function () {
-            const dirObj = await graph.directoryObjects.getById(testChildGroupID);
-            return expect(dirObj).is.not.null;
-        });
+    it("Check User Member Groups (1)", async function () {
+        const memberGroups = await this.pnp.graph.users.getById(testUserName).checkMemberGroups([testChildGroupID, testParentGroupID, testGUID]);
+        return expect(memberGroups.length).is.equal(2);
+    });
 
-        it("Check MemberOf", async function () {
-            const memberObjects = await graph.users.getById(testUserName).memberOf();
-            return expect(memberObjects.length).greaterThan(0);
-        });
+    it("Check User Member Groups (2)", async function () {
+        const memberGroups = await this.pnp.graph.groups.getById(testChildGroupID).checkMemberGroups([testChildGroupID, testParentGroupID, testGUID]);
+        return expect(memberGroups.length).is.equal(1);
+    });
 
-        // This is not supported in an application context
-        // it("Delete Directory Object", async function () {
-        //     await graph.directoryObjects.getById(testChildGroupID).delete();
-        //     return expect(true).is.not.null;
-        // });
+    it("Get directory object by ID", async function () {
+        const dirObj = await this.pnp.graph.directoryObjects.getById(testChildGroupID);
+        return expect(dirObj).is.not.null;
+    });
 
-        // Remove the test data we created
-        this.afterAll(async function () {
-            await graph.groups.getById(testChildGroupID).delete();
-            await graph.groups.getById(testParentGroupID).delete();
-        });
-    }
+    it("Check MemberOf", async function () {
+        const memberObjects = await this.pnp.graph.users.getById(testUserName).memberOf();
+        return expect(memberObjects.length).greaterThan(0);
+    });
 
+    // Remove the test data we created
+    after(async function () {
+        const promises = [Promise.resolve()];
+        if (this.pnp.settings.enableWebTests && !stringIsNullOrEmpty(this.pnp.settings.testUser)) {
+            promises.push(this.pnp.graph.groups.getById(testChildGroupID).delete());
+            promises.push(this.pnp.graph.groups.getById(testParentGroupID).delete());
+        }
+        return Promise.all(promises);
+    });
 });

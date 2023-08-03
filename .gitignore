@@ -18,6 +18,8 @@ coverage
 # node-waf configuration
 .lock-wscript
 
+.recordings
+
 # Dependency directory
 node_modules
 
@@ -39,9 +41,12 @@ debug/launch/*
 !debug/launch/graph.ts
 !debug/launch/tsconfig.json
 !debug/launch/setup.ts
+!debug/launch/v3.ts
+!debug/launch/v3-patrick.ts
 
 debug/serve/*
 !debug/serve/main.ts
+!debug/serve/spa.html
 !debug/serve/tsconfig.json
 !debug/serve/plumbing
 
